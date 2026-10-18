@@ -1,0 +1,182 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- ===================== T10.5 原生闹钟层所需的权限 ===================== -->
+
+    <!-- 精确闹钟：Android 12（API 31）引入且默认授予；
+         Android 14（API 34）起对 targetSdk>=34 的普通应用**默认拒绝**，需用户到
+         系统「闹钟和提醒」页手动授予，且没有可用的授权弹窗。
+         本应用**不使用** USE_EXACT_ALARM —— 那个只给核心功能是闹钟/日历的应用。 -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
+    <!-- 全屏响铃：Android 14 起对非通话/闹钟类应用收紧。
+         未授予时 setFullScreenIntent 会自动退化为悬浮通知（不崩、也不静默丢事件）。 -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+    <!-- 通知（Android 13+ 运行时权限）：未授予时通知完全不显示。
+         **运行时申请流程属 UI 侧（场景化授权），本任务只做原生能力，不实现申请弹窗。** -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- ===================== 工具箱 · 途径提醒所需的定位权限 =====================
+         1) 前台定位：COARSE（粗略）+ FINE（精确）。两者都声明是官方推荐做法 ——
+            Android 12+ 用户可以只授予「大致位置」，此时 FINE 请求会退化为 COARSE，
+            功能仍可用（围栏半径默认 200m，粗略定位够用）。
+         2) ACCESS_BACKGROUND_LOCATION：Android 11+ **不能与前台权限一起弹**，
+            必须在用户已授予前台定位后，再到系统设置里单独选择「始终允许」。
+            因此本轮实现是「前台轮询（每 30 秒）」，不依赖后台定位；
+            该权限仍然声明，供后续上「前台服务 + 后台围栏」时使用。 -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
+
+    <!-- ===================== T13b 响铃解耦所需的前台服务 =====================
+         FOREGROUND_SERVICE：所有前台服务的通用权限（API 28+）。
+         FOREGROUND_SERVICE_SPECIAL_USE：specialUse 类型专属（API 34+，普通权限、默认授予、用户不可撤销）。
+         两者都是「普通权限」，不会给用户弹窗。 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <!-- 开机重建（T11）：重启后 AlarmManager 会被系统清空，必须靠这条广播触发全量重排。
+         广播由系统投递，第三方应用无法伪造。 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <application
+        android:label="efficiency_app"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+
+        <!-- ============ T10.5 闹钟到点 / 通知动作 ============
+             只负责：发通知（内含 setFullScreenIntent）+ 重排下一次 + 处理「贪睡 / 关闭」。
+             **绝不做 startActivity 拉起全屏页**（v2.2 硬伤 1 定案）。 -->
+        <receiver
+            android:name=".alarm.AlarmReceiver"
+            android:exported="false" />
+
+        <!-- ============ T10.5 全屏响铃页（T14 修订：exported false -> true）============
+             **exported=true 是必须的**：9b 真机实测（熄屏 + 锁屏）下，全屏页没能盖住锁屏 ——
+             此时 setFullScreenIntent 由 SystemUI（**另一个 UID**）代启，
+             exported=false 会把这条跨 UID 的启动挡掉；而系统日志里仍会有
+             `ActivityTaskManager: Displayed ... +304ms`，所以现象是"系统试过了、但页面出不来"。
+             （亮屏场景不受影响，因为那是本应用自己启动自己的 Activity。）
+
+             对外开放的代价用**来源校验**兜住，不用签名级权限：
+             签名级权限 SystemUI 并不持有，那样会把要修的那条路重新挡死。
+             校验落在 Activity 里（见 AlarmFullScreenActivity.onCreate / onNewIntent）：
+             action 必须严格等于本应用自己的 AlarmContract.ACTION_ALARM，否则立刻 finish()。
+
+             showWhenLocked / turnScreenOn（API 27+）：锁屏上直接显示并点亮屏幕。 -->
+        <activity
+            android:name=".alarm.AlarmFullScreenActivity"
+            android:exported="true"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/AlarmFullScreenTheme"
+            tools:targetApi="o_mr1" />
+
+        <!-- ============ T13b 响铃归属者（前台服务）============
+             响铃（MediaPlayer 循环 + 振动）由它持有，**生命周期不依赖任何页面**。
+             起因：真机实测全屏页在 onResume 后约 50ms 被 ROM 销毁，页面持铃导致铃只响 211ms。
+
+             foregroundServiceType=specialUse（与修复清单 T17 / ADR-007 对齐）：
+               - shortService 被排除：约 3 分钟上限，与本应用 5 分钟的 AUTO_STOP 直接冲突；
+               - mediaPlayback 不选：语义是「后台继续播放音视频」，隐含媒体会话/媒体样式通知，
+                 而本服务的通知是带「贪睡/关闭」的闹钟通知，用它属于错报用途；
+               - specialUse 正是「其它类型未涵盖的合法前台服务用途」，且**无时长上限**、
+                 无运行时前置条件（官方 FGS 类型表已核对）。
+             代价：上架 Play 需要在控制台说明用途 —— 由下面的 <property> 声明子类型。
+
+             exported=false：只由本应用自己的 PendingIntent / startService 驱动。 -->
+        <service
+            android:name=".alarm.AlarmService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="alarm_ringing_until_dismissed_or_auto_stop" />
+        </service>
+
+        <!-- ============ T11 开机重建 ============
+             重启后 AlarmManager 被清空，靠这两个广播把 scheduled_alarms 里的闹钟全量重排。
+
+             exported=true    ：系统（另一个进程）要能投递，必须对外开放。
+                                两个 action 都在系统保护广播列表内，第三方无法伪造。
+             directBootAware=true：否则**收不到** LOCKED_BOOT_COMPLETED。
+                                该广播在用户解锁前到达，本应用的 drift 库在
+                                credential-encrypted 存储里读不到 —— BootReceiver 对此
+                                走**显式降级**（记 DEGRADED 日志后跳过），不静默失败。 -->
+        <receiver
+            android:name=".alarm.BootReceiver"
+            android:exported="true"
+            android:directBootAware="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- ============ 工具箱插件：本地通知（生日提醒 / 途径提醒）============
+             flutter_local_notifications 的定时通知靠这两个 receiver 投递：
+             - ScheduledNotificationReceiver：闹钟到点由 AlarmManager 唤起它；
+             - ScheduledNotificationBootReceiver：重启/应用更新后把计划重新登记。
+             缺了后者，手机一重启，所有定时通知就静默消失（常见坑）。 -->
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
+            android:exported="false" />
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+    <!-- Required to query activities that can process text, see:
+         https://developer.android.com/training/package-visibility and
+         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+
+         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>

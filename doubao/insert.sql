@@ -1,0 +1,1 @@
+INSERT INTO scheduled_alarms (task_id,hour,minute,repeat_rule,weekdays,scheduled_date,advance_minute,ringtone,volume,snooze_enabled,snooze_minutes) VALUES (99,7,30,'daily',NULL,1792200000000,15,'test',0.8,1,5);

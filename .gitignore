@@ -1,0 +1,24 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+build/
+*.apk
+*.aab
+
+# Android
+android/.gradle/
+android/local.properties
+*.jks
+*.keystore
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# 测试产物（UI dump 含隐私）
+ui*.xml
+t*.xml
+
+# 个人配置
+*.log

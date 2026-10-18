@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 全屏闹钟页文案（T10.5）。
+     注：这里刻意不含「电源键快速关闭」之类的措辞 —— 实际行为是「息屏即关闭」，
+     电源键事件在系统分发前就被消费，应用收不到（修复清单 T15 定案）。 -->
+<resources>
+    <string name="alarm_default_title">任务提醒</string>
+    <string name="alarm_snooze">贪睡</string>
+    <string name="alarm_dismiss">关闭</string>
+    <string name="alarm_dismiss_hint">息屏或点「关闭」结束响铃</string>
+</resources>

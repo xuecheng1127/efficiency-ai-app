@@ -1,0 +1,24 @@
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    # 统一使用 single quotes，保持代码风格一致
+    prefer_single_quotes: true
+    # 禁止打印调试信息遗留在代码中
+    avoid_print: true
+    # 常量优先
+    prefer_const_constructors: true
+    prefer_const_declarations: true
+    # 空构造函数使用 const
+    prefer_const_constructors_in_immutables: true
+
+analyzer:
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+    - "**/*.isar.dart"
+    - build/**
+    - android/**
+  errors:
+    # freezed / json_serializable 生成文件参与编译，避免误报
+    invalid_annotation_target: ignore

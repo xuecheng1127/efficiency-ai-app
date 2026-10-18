@@ -1,0 +1,47 @@
+﻿flutter : Flutter assets will be downloaded from https://storage.flutter-io.cn. Make sure you trust this source!
+所在位置 行:1 字符: 131
++ ... ncy_app_db; flutter test > F:\develop\efficiency_app_db\test_out.txt  ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Flutter assets ...st this source!:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+00:00 +0: loading F:/develop/efficiency_app_db/test/alarm_contract_test.dart
+00:00 +0: F:/develop/efficiency_app_db/test/alarm_contract_test.dart: AlarmScheduler.buildPendingIntent 必须设置 action=ACTION_ALARM
+00:00 +0 -1: F:/develop/efficiency_app_db/test/alarm_contract_test.dart: AlarmScheduler.buildPendingIntent 必须设置 action=ACTION_ALARM [E]
+  Expected: <true>
+    Actual: <Instance of 'Future<bool>'>
+  AlarmScheduler.kt 必须存在
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test\alarm_contract_test.dart 11:5                  main.<fn>
+  
+00:00 +0 -1: F:/develop/efficiency_app_db/test/alarm_contract_test.dart: AlarmReceiver.onReceive 必须有 else 兜底日志
+00:00 +0 -2: F:/develop/efficiency_app_db/test/alarm_contract_test.dart: AlarmReceiver.onReceive 必须有 else 兜底日志 [E]
+  Expected: <true>
+    Actual: <Instance of 'Future<bool>'>
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test\alarm_contract_test.dart 34:5                  main.<fn>
+  
+00:00 +0 -2: F:/develop/efficiency_app_db/test/backfill_db_test.dart: D1 幂等性 同一 backfill 连续调用 3 次，task_instances 行数不变
+00:00 +1 -2: F:/develop/efficiency_app_db/test/backfill_db_test.dart: D2 首次补齐 新 daily 模板一次调用恰好生成 1 条当日实例
+00:00 +2 -2: F:/develop/efficiency_app_db/test/backfill_db_test.dart: D3 补历史 startDate 为 3 天前 → 一次补齐 4 条（含今天）
+00:00 +3 -2: F:/develop/efficiency_app_db/test/backfill_db_test.dart: D4 唯一约束生效 手工插入重复 (templateId, occurrenceDate) 抛约束错误
+00:00 +4 -2: F:/develop/efficiency_app_db/test/backfill_logic_test.dart: U1 daily 连续 5 天全 true daily 模板对 startDate 起连续 5 天逐一判断均返回 true
+00:00 +5 -2: F:/develop/efficiency_app_db/test/backfill_logic_test.dart: U1 daily 连续 5 天全 true daily 模板对 startDate 起连续 5 天逐一判断均返回 true
+00:00 +6 -2: F:/develop/efficiency_app_db/test/backfill_db_test.dart: D6 软删除不复活 实例设 deletedAt → 再补齐不重新创建
+00:00 +7 -2: F:/develop/efficiency_app_db/test/backfill_logic_test.dart: U2 weekly 固定日 repeatDays="1,3,5" 一周 7 天仅周一/三/五为 true
+00:00 +8 -2: F:/develop/efficiency_app_db/test/backfill_db_test.dart: D7 归档模板不再生成 模板设 archivedAt → 再补齐不产生新实例
+00:00 +9 -2: F:/develop/efficiency_app_db/test/backfill_db_test.dart: D7 归档模板不再生成 模板设 archivedAt → 再补齐不产生新实例
+00:00 +10 -2: F:/develop/efficiency_app_db/test/backfill_db_test.dart: D7 归档模板不再生成 模板设 archivedAt → 再补齐不产生新实例
+00:00 +11 -2: F:/develop/efficiency_app_db/test/backfill_logic_test.dart: U5 endDate 后不生成 daily 模板 endDate 之后一天不生成实例
+00:00 +12 -2: F:/develop/efficiency_app_db/test/backfill_db_test.dart: D8 上限保护 startDate 为 365 天前 → 一次补齐实例数 ≤ MAX_BACKFILL_DAYS
+00:00 +13 -2: F:/develop/efficiency_app_db/test/backfill_db_test.dart: D8 上限保护 startDate 为 365 天前 → 一次补齐实例数 ≤ MAX_BACKFILL_DAYS
+00:00 +14 -2: F:/develop/efficiency_app_db/test/backfill_db_test.dart: D8 上限保护 startDate 为 365 天前 → 一次补齐实例数 ≤ MAX_BACKFILL_DAYS
+00:00 +15 -2: Some tests failed.
+
+Failing tests:
+  F:/develop/efficiency_app_db/test/alarm_contract_test.dart: AlarmReceiver.onReceive 必须有 else 兜底日志
+  F:/develop/efficiency_app_db/test/alarm_contract_test.dart: AlarmScheduler.buildPendingIntent 必须设置 action=ACTION_ALARM

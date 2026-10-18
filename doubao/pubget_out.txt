@@ -1,0 +1,33 @@
+﻿flutter : Flutter assets will be downloaded from https://storage.flutter-io.cn. Make sure you trust this source!
+所在位置 行:1 字符: 328
++ ... e build -ErrorAction SilentlyContinue }; flutter pub get 2>&1 | Tee-O ...
++                                              ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Flutter assets ...st this source!:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Resolving dependencies...
+Downloading packages...
+Warning: Unable to fetch advisories for "archive" from "https://mirrors.tuna.tsinghua.edu.cn/dart-pub/".
+Warning: Unable to fetch advisories for "http" from "https://mirrors.tuna.tsinghua.edu.cn/dart-pub/".
+Warning: Unable to fetch advisories for "shared_preferences_android" from "https://mirrors.tuna.tsinghua.edu.cn/dart-pu
+b/".
+  archive 3.6.1 (4.5.2 available)
+  build 4.0.11 (5.0.0 available)
+  build_config 1.3.3 (1.4.0 available)
+  build_runner 2.16.2 (2.17.1 available)
+  equatable 2.1.0 (3.0.0 available)
+  fl_chart 0.69.2 (1.2.0 available)
+  flutter_foreground_task 8.17.0 (11.0.3 available)
+  flutter_lints 4.0.0 (6.0.0 available)
+  flutter_riverpod 2.6.1 (3.4.3 available)
+  lints 4.0.0 (6.1.0 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  package_info_plus 8.3.1 (10.2.2 available)
+  package_info_plus_platform_interface 3.2.1 (4.1.0 available)
+  riverpod 2.6.1 (3.4.3 available)
+  sqlite3_flutter_libs 0.5.42 (0.6.0+eol available)
+  test_api 0.7.12 (0.7.15 available)
+  win32 5.15.0 (6.4.0 available)
+Got dependencies!
+17 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.

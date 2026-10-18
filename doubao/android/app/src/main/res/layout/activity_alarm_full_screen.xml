@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 闹钟全屏响铃页布局（模块1 闹钟提醒系统，V1.2） -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/alarm_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/alarm_background">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="40dp">
+
+        <!-- 任务标题 -->
+        <TextView
+            android:id="@+id/tv_alarm_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="任务提醒"
+            android:textColor="@color/alarm_text_primary"
+            android:textSize="28sp"
+            android:fontFamily="sans-serif-medium"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:gravity="center" />
+
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="24dp" />
+
+        <!-- 当前时间（秒级刷新） -->
+        <TextView
+            android:id="@+id/tv_alarm_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="00:00:00"
+            android:textColor="@color/alarm_text_primary"
+            android:textSize="56sp"
+            android:fontFamily="sans-serif-light"
+            android:gravity="center" />
+
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="16dp" />
+
+        <!-- 操作提示 -->
+        <TextView
+            android:id="@+id/tv_alarm_hint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="下滑关闭 · 息屏即停"
+            android:textColor="@color/alarm_text_secondary"
+            android:textSize="14sp"
+            android:gravity="center" />
+
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="48dp" />
+
+        <!-- 操作按钮区 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center">
+
+            <Button
+                android:id="@+id/btn_alarm_snooze"
+                android:layout_width="0dp"
+                android:layout_height="56dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:backgroundTint="@color/alarm_btn_snooze"
+                android:textColor="@color/alarm_text_primary"
+                android:text="贪睡"
+                android:textSize="16sp" />
+
+            <Button
+                android:id="@+id/btn_alarm_dismiss"
+                android:layout_width="0dp"
+                android:layout_height="56dp"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:backgroundTint="@color/alarm_btn_dismiss"
+                android:textColor="@color/alarm_text_primary"
+                android:text="关闭"
+                android:textSize="16sp" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

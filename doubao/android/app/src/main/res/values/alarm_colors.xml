@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 闹钟全屏页背景（深色，锁屏可见） -->
+    <color name="alarm_background">#0F172A</color>
+    <color name="alarm_text_primary">#FFFFFF</color>
+    <color name="alarm_text_secondary">#A1A1AA</color>
+    <color name="alarm_btn_snooze">#2563EB</color>
+    <color name="alarm_btn_dismiss">#10B981</color>
+</resources>
