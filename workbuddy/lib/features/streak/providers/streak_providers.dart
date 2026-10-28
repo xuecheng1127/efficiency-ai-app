@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_provider.dart';
 import '../../../core/settings/app_settings.dart';
+import '../../../core/time/day_tick.dart';
 import '../data/streak_repository_impl.dart';
 import '../domain/streak.dart';
 
@@ -14,22 +15,10 @@ final streakRepositoryProvider = Provider<StreakRepository>((ref) {
 
 /// 「今天」的零点，跨零点会自动推进。
 ///
-/// 为什么单独抽一个 Provider：火花的定义依赖「今天是哪天」，
-/// 如果只在页面 build 时取一次 `DateTime.now()`，应用挂后台过夜后
-/// 火花的「今天没做不扣」会算错一天。这里用一条到次日零点自动醒来的流，
-/// 跨日时下游（streakProvider）自然重算。
-final streakTodayProvider = StreamProvider<DateTime>((ref) async* {
-  while (true) {
-    final now = DateTime.now();
-    final today = streakDateOnly(now);
-    yield today;
-    final nextMidnight = DateTime(now.year, now.month, now.day + 1);
-    // +1 秒：确保醒来时已经跨过零点（否则可能落在 23:59:59.999）。
-    await Future<void>.delayed(
-      nextMidnight.difference(now) + const Duration(seconds: 1),
-    );
-  }
-});
+/// 实现搬到了 `core/time/day_tick.dart`（任务列表也要用同一条节拍，
+/// 否则「火花换了天、任务页还停在昨天」）。这里**直接别名**而不是再包一层，
+/// 保持既有 override（测试）与依赖关系完全不变。
+final streakTodayProvider = dayTickProvider;
 
 /// 当前火花（响应式）。
 ///

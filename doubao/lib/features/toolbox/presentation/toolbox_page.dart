@@ -28,6 +28,24 @@ class ToolboxPage extends StatelessWidget {
             ),
           ),
           _PluginTile(
+            icon: Icons.shopping_cart_outlined,
+            title: '采购清单',
+            subtitle: '分类折叠、已购沉底、模板复用',
+            available: true,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ShoppingListPage()),
+            ),
+          ),
+          _PluginTile(
+            icon: Icons.near_me_outlined,
+            title: '途径提醒',
+            subtitle: '走到超市自动提醒买菜，经过快递站提醒拿件',
+            available: true,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const LocationReminderListPage()),
+            ),
+          ),
+          _PluginTile(
             icon: Icons.cake_outlined,
             title: '朋友生日',
             subtitle: '公历/农历、提前提醒、分组标签',
@@ -43,24 +61,6 @@ class ToolboxPage extends StatelessWidget {
             available: true,
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const CaloriePage()),
-            ),
-          ),
-          _PluginTile(
-            icon: Icons.near_me_outlined,
-            title: '途径提醒',
-            subtitle: '走到超市自动提醒买菜，经过快递站提醒拿件',
-            available: true,
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const LocationReminderListPage()),
-            ),
-          ),
-          _PluginTile(
-            icon: Icons.shopping_cart_outlined,
-            title: '采购清单',
-            subtitle: '分类折叠、已购沉底、模板复用',
-            available: true,
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ShoppingListPage()),
             ),
           ),
         ],

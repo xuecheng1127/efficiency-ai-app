@@ -263,10 +263,57 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
-  /// 打开数据库：存放于应用专属目录，后台 isolate 执行避免阻塞 UI。
-  static Future<AppDatabase> open() async {
+  /// 数据库文件的默认位置（应用专属目录，卸载即清）。
+  static Future<File> defaultFile() async {
     final dir = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dir.path, 'efficiency_app.sqlite'));
-    return AppDatabase(NativeDatabase.createInBackground(file));
+    return File(p.join(dir.path, 'efficiency_app.sqlite'));
+  }
+
+  /// 打开数据库：存放于应用专属目录，后台 isolate 执行避免阻塞 UI。
+  ///
+  /// [file] 只给测试用（真实路径由 [defaultFile] 决定）。
+  /// 注意 `NativeDatabase.createInBackground` 是**惰性**的：文件坏了这里不会抛，
+  /// 要等第一次查询才炸 —— 所以启动流程必须先跑一次 [assertReadable]。
+  static Future<AppDatabase> open({File? file}) async {
+    final target = file ?? await defaultFile();
+    return AppDatabase(NativeDatabase.createInBackground(target));
+  }
+
+  /// 启动自检：真正读一次库头（`sqlite_master`）。
+  ///
+  /// 文件被截断 / 头部被覆盖 / 根本不是 SQLite 时，这里会抛 `SqliteException`，
+  /// 让调用方在 `runApp` 之前就知道「库打不开」，而不是把用户丢在白屏上。
+  static Future<void> assertReadable(AppDatabase db) async {
+    await db.customSelect('SELECT count(*) AS c FROM sqlite_master').getSingle();
+  }
+
+  /// 把损坏的数据库文件**挪到旁边**（改名，不删除），返回新路径。
+  ///
+  /// 三条铁律：
+  /// - 原文件一个字节都不丢：只是改名 + 保留 `-wal` / `-shm` 同名兄弟文件；
+  /// - 目录不可写等异常向上抛，由 UI 明确告诉用户「没恢复成功」；
+  /// - 文件本来就不存在 → 返回 null（没什么可备份的，直接重建即可）。
+  static Future<File?> quarantine(File dbFile) async {
+    if (!await dbFile.exists()) return null;
+    final target = File('${dbFile.path}.corrupt-${_stamp(DateTime.now())}');
+    await dbFile.rename(target.path);
+    for (final suffix in const ['-wal', '-shm']) {
+      final side = File('${dbFile.path}$suffix');
+      if (await side.exists()) {
+        await side.rename('${target.path}$suffix');
+      }
+    }
+    return target;
+  }
+
+  /// 默认位置的损坏库备份（给启动失败页用）。
+  static Future<File?> quarantineDefault() async =>
+      quarantine(await defaultFile());
+
+  /// `20261029_031500` —— 文件名里不用冒号（跨平台安全）。
+  static String _stamp(DateTime t) {
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${t.year}${two(t.month)}${two(t.day)}_'
+        '${two(t.hour)}${two(t.minute)}${two(t.second)}';
   }
 }

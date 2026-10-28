@@ -175,16 +175,16 @@ class _DiaryPreviewPageState extends ConsumerState<DiaryPreviewPage> {
         watch.stop();
         final elapsedMs = watch.elapsedMicroseconds / 1000.0;
 
-        if (result.laidOutParagraphs > 0) {
-          // 真机性能证据：release 包里这条日志同样会打到 logcat（tag: flutter）
-          debugPrint(
-            '[CjkPreview] chars=${text.length} lines=${result.lines.length} '
-            'maxWidth=${maxLineWidth.toStringAsFixed(1)} '
-            'layout=${elapsedMs.toStringAsFixed(1)}ms '
-            'laidOut=${result.laidOutParagraphs} '
-            'reused=${result.reusedParagraphs}',
-          );
-        }
+        // 真机性能证据：release 包里这条日志同样会打到 logcat（tag: flutter）。
+        // 每次都打（而不是只在重排时打）—— 缓存全命中时 `laidOut=0 reused=4` 本身就是
+        // 「增量重排生效」的证据，只打重排那一次就看不到它了。
+        debugPrint(
+          '[CjkPreview] chars=${text.length} lines=${result.lines.length} '
+          'maxWidth=${maxLineWidth.toStringAsFixed(1)} '
+          'layout=${elapsedMs.toStringAsFixed(1)}ms '
+          'laidOut=${result.laidOutParagraphs} '
+          'reused=${result.reusedParagraphs}',
+        );
 
         final canvasHeight =
             _topPad + result.lines.length * lineHeight + _bottomPad;

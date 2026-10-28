@@ -28,9 +28,19 @@ class DiaryPage extends ConsumerWidget {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const DiaryEditorPage()),
-        ),
+        onPressed: () async {
+          final saved = await Navigator.of(context).push<bool>(
+            MaterialPageRoute(builder: (_) => const DiaryEditorPage()),
+          );
+          if (saved == true && context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('日记已保存 · ${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')}'),
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+        },
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.edit),

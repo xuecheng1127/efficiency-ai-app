@@ -376,6 +376,8 @@ class _TaskPreviewRow extends StatelessWidget {
           color: color,
         ),
         const SizedBox(width: AppDimens.chipGap),
+        // 标题吃掉剩余宽度（超长时省略），与右侧状态之间留一格间距：
+        // 没有这一格，长标题的「…」会紧贴「未开始」，看起来像两个词粘在一起。
         Expanded(
           child: Text(
             item.titleSnapshot,
@@ -387,6 +389,7 @@ class _TaskPreviewRow extends StatelessWidget {
             ),
           ),
         ),
+        const SizedBox(width: AppDimens.chipGap),
         Text(switch (item.status) {
           TaskStatus.todo => '未开始',
           TaskStatus.inProgress => '计时中',

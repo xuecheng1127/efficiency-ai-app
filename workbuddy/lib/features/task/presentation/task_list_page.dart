@@ -19,11 +19,28 @@ import 'widgets/task_tile.dart';
 ///
 /// 结构：顶部「今日进度」卡 + 任务卡列表，右下角 FAB 进入独立的
 /// [AddTaskPage]（本页不再承担创建表单逻辑）。
-class TaskListPage extends ConsumerWidget {
-  const TaskListPage({super.key});
+class TaskListPage extends ConsumerStatefulWidget {
+  const TaskListPage({super.key, this.clock});
+
+  /// 可注入时钟：只有测试会用（去抖窗口要能在假时间轴上推进），
+  /// 生产环境为空 → `DateTime.now()`。
+  final DateTime Function()? clock;
+
+  @override
+  ConsumerState<TaskListPage> createState() => _TaskListPageState();
+}
+
+class _TaskListPageState extends ConsumerState<TaskListPage> {
+  /// 「刚才完成过一条」的时间戳 —— 连点去抖用（见 [_complete]）。
+  DateTime? _lastCompleteAt;
+
+  DateTime _now() => widget.clock?.call() ?? DateTime.now();
+
+  /// 去抖窗口：400ms。比一次 tap 的余波长，比人手换目标点短。
+  static const Duration _completeCooldown = Duration(milliseconds: 400);
 
   /// 点击条目：todo → 开始计时；inProgress → 取消计时
-  void _toggle(WidgetRef ref, TaskInstance instance) {
+  void _toggle(TaskInstance instance) {
     final repo = ref.read(taskRepositoryProvider);
     switch (instance.status) {
       case TaskStatus.todo:
@@ -41,13 +58,19 @@ class TaskListPage extends ConsumerWidget {
   /// ✓ 按钮（48dp 热区）。所以这里不改造点击语义，只补「5 秒内可撤销」——
   /// 误点一下能以最小代价退回去。
   ///
+  /// **连点去抖（HARDENING A3）**：完成的条目会「沉底」（`watchTodayInstances`
+  /// 按 done 排序），一次点击成功后列表会在手指下面重排 —— 同一个坐标的第二次
+  /// 点击会落到**另一条**任务上。实测 10 连点会把 3 条任务全部标成完成。
+  /// 所以这里加一个 400ms 窗口：窗口内的重复点击直接忽略（不写库、不弹提示）。
+  ///
   /// messenger 在 await 之前取好：完成会触发列表流刷新，本 item 的 context
   /// 可能已经被回收，之后再 `ScaffoldMessenger.of(context)` 就不可靠了。
-  Future<void> _complete(
-    BuildContext context,
-    WidgetRef ref,
-    TaskInstance instance,
-  ) async {
+  Future<void> _complete(BuildContext context, TaskInstance instance) async {
+    final now = _now();
+    final last = _lastCompleteAt;
+    if (last != null && now.difference(last) < _completeCooldown) return;
+    _lastCompleteAt = now;
+
     final messenger = ScaffoldMessenger.of(context);
     final repo = ref.read(taskRepositoryProvider);
     await repo.completeInstance(instance.id);
@@ -71,11 +94,7 @@ class TaskListPage extends ConsumerWidget {
   /// 长按已完成的任务：菜单 →「标记为未完成」→ 确认框（UNDO-COMPLETE §1/§2）。
   ///
   /// 菜单只放这一项：删除已有独立按钮、闹钟也有独立按钮，重复列出只会增加误触面。
-  Future<void> _openDoneMenu(
-    BuildContext context,
-    WidgetRef ref,
-    TaskInstance instance,
-  ) async {
+  Future<void> _openDoneMenu(BuildContext context, TaskInstance instance) async {
     final action = await showModalBottomSheet<String>(
       context: context,
       builder: (sheetContext) => SafeArea(
@@ -102,14 +121,13 @@ class TaskListPage extends ConsumerWidget {
       ),
     );
     if (action == 'uncomplete' && context.mounted) {
-      await _confirmUncomplete(context, ref, instance);
+      await _confirmUncomplete(context, instance);
     }
   }
 
   /// 取消完成前的确认框：反向操作必须明确确认，不用 SnackBar 撤销。
   Future<void> _confirmUncomplete(
     BuildContext context,
-    WidgetRef ref,
     TaskInstance instance,
   ) async {
     final ok = await showDialog<bool>(
@@ -136,7 +154,6 @@ class TaskListPage extends ConsumerWidget {
 
   Future<void> _confirmDelete(
     BuildContext context,
-    WidgetRef ref,
     TaskInstance instance,
   ) async {
     final ok = await showDialog<bool>(
@@ -178,7 +195,6 @@ class TaskListPage extends ConsumerWidget {
   /// 打开闹钟设置（T10 的最小调度入口）
   Future<void> _openAlarmEditor(
     BuildContext context,
-    WidgetRef ref,
     TaskInstance instance,
     ScheduledAlarm? existing,
   ) {
@@ -194,7 +210,7 @@ class TaskListPage extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final asyncInstances = ref.watch(todayInstancesProvider);
     final alarmsByTask = ref.watch(alarmsByTaskProvider);
 
@@ -254,14 +270,14 @@ class TaskListPage extends ConsumerWidget {
                     return TaskTile(
                       instance: instance,
                       alarm: alarm,
-                      onToggle: () => _toggle(ref, instance),
-                      onComplete: () => _complete(context, ref, instance),
-                      onDelete: () => _confirmDelete(context, ref, instance),
+                      onToggle: () => _toggle(instance),
+                      onComplete: () => _complete(context, instance),
+                      onDelete: () => _confirmDelete(context, instance),
                       onAlarm: () =>
-                          _openAlarmEditor(context, ref, instance, alarm),
+                          _openAlarmEditor(context, instance, alarm),
                       // 只有已完成的任务才有「标记为未完成」可做
                       onLongPress: instance.status == TaskStatus.done
-                          ? () => _openDoneMenu(context, ref, instance)
+                          ? () => _openDoneMenu(context, instance)
                           : null,
                     );
                   },

@@ -5,7 +5,7 @@
 ![Flutter](https://img.shields.io/badge/Flutter-3.47-02569B?logo=flutter)
 ![Dart](https://img.shields.io/badge/Dart-3.9-0175C2?logo=dart)
 ![Platform](https://img.shields.io/badge/Android-10%2B-3DDC84?logo=android)
-![Tests](https://img.shields.io/badge/tests-145%20passed-brightgreen)
+![Tests](https://img.shields.io/badge/tests-272%20passed-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ---
@@ -170,13 +170,22 @@ lib/
 
 ---
 
-## 已知限制（V1.0）
+## 已知限制（V1.1）
 
-- 日记排版引擎未接入 UI（用原生 TextField）
-- 无图片插入、无仿真翻页（V2）
-- 无数据导出（V2）
-- 工作台仅占位
-- 工具箱只有备忘录一个插件
+**真实存在、且这次没做的**（不是「以后可以加」的功能清单）：
+
+- **编辑态无法接管断行**：`TextField` 的换行在框架内部完成，应用层拿不到断点。
+  避头尾 / 悬挂标点只在**预览页**生效；编辑时看到的是原生换行（V2 需自绘 `RenderEditable`）。
+- **预览页不内联渲染图片块**：`[[img:…]]` 只按文字排版，页头提示「N 张图片（编辑页查看）」。
+- **孤儿图片不回收**：删日记不会删图片文件，只有「在编辑页移除那张图」才删。
+- **没有回收站**：删除是软删（`deleted_at`），但没有恢复入口。
+- **「从备份恢复」仍是灰化的占位**：能导出 ZIP，不能导入。
+- **数据库损坏只能「备份并重建」**：会把坏文件改名保留（`…sqlite.corrupt-时间戳`），
+  但应用内**不能**把它读回来；需要人工或后续版本做导入。
+- **预览页固定 `TextScaler.noScaling`**：度量与绘制必须同 scale，可访问性交给日记自己的字号滑块。
+- **闹钟依赖系统权限**：精确闹钟被拒 → 退到近似档（可能延迟几分钟）；通知权限被拒 → 只有全屏页，没有通知。
+- **跨零点行为**：任务列表与火花都会在 00:00 自动换到新的一天（已实测）；
+  但火花按「昨天没完成即归零」的口径计算，所以**跨零点那一刻**可能从 N 跳到 0，这是设计如此，不是 bug。
 
 ---
 
