@@ -16,8 +16,13 @@ void main() {
     late AppDatabase db;
     late TaskRepositoryImpl repo;
 
-    final today = DateTime(2026, 10, 18);
-    final tomorrow = DateTime(2026, 10, 19);
+    // 日期不能用写死的常量：`addTemplate` 的 startDate 取的是**真实今天**，
+    // 一旦测试写死「2026-10-18」而运行日期晚于它，backfill 会因为
+    // startDate > today 而一条实例都不补，三个用例会集体假失败。
+    // 这里跟随运行日，只保留「昨天 / 明天」的相对关系（测试意图不变）。
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = DateTime(now.year, now.month, now.day + 1);
 
     setUp(() {
       db = AppDatabase(NativeDatabase.memory());

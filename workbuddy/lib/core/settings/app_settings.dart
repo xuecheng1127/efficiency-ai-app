@@ -31,6 +31,7 @@ class AppSettings {
     this.calorieHeightCm = 170,
     this.calorieWeightKg = 65,
     this.calorieActivity = 1.375,
+    this.longestStreak = 0,
   });
 
   /// 内置铃音（原生侧 `AlarmService` 按名字匹配同名前缀的资源）。
@@ -76,6 +77,14 @@ class AppSettings {
   final int calorieWeightKg;
   final double calorieActivity;
 
+  /// 历史最长连续火花天数（缓存）。
+  ///
+  /// 为什么要有这个缓存：火花本身是从 `task_instances.completed_at` 现算的，
+  /// 但「历史最长」一旦被打破就应当保留 —— 如果只靠当前数据算，
+  /// 用户哪天把旧任务删了，历史最长会跟着缩水。这里存的是**只增不减**的下界，
+  /// 展示时取 `max(现算值, 缓存值)`。
+  final int longestStreak;
+
   AppSettings copyWith({
     bool? remindersEnabled,
     bool? snoozeEnabled,
@@ -91,6 +100,7 @@ class AppSettings {
     int? calorieHeightCm,
     int? calorieWeightKg,
     double? calorieActivity,
+    int? longestStreak,
   }) {
     return AppSettings(
       remindersEnabled: remindersEnabled ?? this.remindersEnabled,
@@ -107,6 +117,7 @@ class AppSettings {
       calorieHeightCm: calorieHeightCm ?? this.calorieHeightCm,
       calorieWeightKg: calorieWeightKg ?? this.calorieWeightKg,
       calorieActivity: calorieActivity ?? this.calorieActivity,
+      longestStreak: longestStreak ?? this.longestStreak,
     );
   }
 
@@ -125,6 +136,7 @@ class AppSettings {
     'calorieHeightCm': calorieHeightCm,
     'calorieWeightKg': calorieWeightKg,
     'calorieActivity': calorieActivity,
+    'longestStreak': longestStreak,
   };
 
   /// 容错解析：**任何**字段坏掉都退回默认值，绝不让设置文件把应用启动搞崩。
@@ -154,6 +166,10 @@ class AppSettings {
         json['calorieActivity'],
         fallback.calorieActivity,
       ),
+      longestStreak: _parseNonNegativeInt(
+        json['longestStreak'],
+        fallback.longestStreak,
+      ),
     );
   }
 
@@ -162,6 +178,12 @@ class AppSettings {
       final v = raw.toDouble();
       if (v >= 1.0 && v <= 3.0) return v;
     }
+    return fallback;
+  }
+
+  /// 非负整数（火花缓存用）：负数 / 字符串 / null 一律退回默认值。
+  static int _parseNonNegativeInt(Object? raw, int fallback) {
+    if (raw is int && raw >= 0) return raw;
     return fallback;
   }
 
@@ -262,6 +284,7 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     int? calorieHeightCm,
     int? calorieWeightKg,
     double? calorieActivity,
+    int? longestStreak,
   }) {
     return update(
       state.copyWith(
@@ -279,6 +302,7 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
         calorieHeightCm: calorieHeightCm,
         calorieWeightKg: calorieWeightKg,
         calorieActivity: calorieActivity,
+        longestStreak: longestStreak,
       ),
     );
   }

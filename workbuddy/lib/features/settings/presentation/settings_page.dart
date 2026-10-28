@@ -6,6 +6,8 @@ import '../../../core/constants/app_dimens.dart';
 import '../../../core/platform/alarm_channel.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../core/widgets/ui_kit.dart';
+import '../../backup/application/export_backup.dart';
+import '../../backup/providers/backup_providers.dart';
 import '../providers/reminder_switch.dart';
 
 /// ============================================================================
@@ -13,7 +15,8 @@ import '../providers/reminder_switch.dart';
 /// ============================================================================
 ///
 /// 设计约束来自《UI 验收标准》：
-/// - R1 禁止假控件：未实现的「数据与备份」用 [AppDisabledTile] 灰化并写明原因；
+/// - R1 禁止假控件：已实现的「导出全部数据」是真入口；未实现的「从备份恢复」
+///   仍用 [AppDisabledTile] 灰化并写明原因；
 /// - D1 卡片分组 / D2 每行图标 / D3 每行说明：一律走 `AppSectionHeader` +
 ///   `AppCard.group` + `ui_kit` 的行组件，天然满足；
 /// - D4 状态颜色：闹钟档位用 [AppStatusTile]（绿=精确档 / 橙=近似档）；
@@ -47,6 +50,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
   /// 为什么不用 `ref.watch` 直接驱动：每移动一格都写一次 JSON 文件没有意义，
   /// 而且会让滑块跟着异步回写抖动。
   int? _volumeDraft;
+
+  /// 导出中：防连点，同时给行尾一个进度圈（点了必须有反馈）。
+  bool _exporting = false;
 
   @override
   void initState() {
@@ -111,6 +117,50 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
   Future<void> _setSnoozeEnabled(bool enabled, int minutes) async {
     await ref.read(appSettingsProvider.notifier).patch(snoozeEnabled: enabled);
     _toast(enabled ? '已开启贪睡：默认 $minutes 分钟后再次提醒' : '已关闭贪睡：闹钟不会再二次提醒');
+  }
+
+  /// 导出全部数据：wal_checkpoint → 打包 ZIP → 写文档目录 → 提示路径/大小。
+  ///
+  /// 失败**不吞**：区分「数据库文件找不到」这种可解释原因与其他异常，
+  /// 用户至少知道是没导出成功，而不是「点了没反应」。
+  Future<void> _exportData() async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    try {
+      final result = await ref.read(backupExporterProvider).export();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              '已导出 ${formatBackupBytes(result.bytes)}\n${result.file.path}',
+            ),
+            duration: const Duration(seconds: 10),
+            // Flutter 3.47 起：带 action 的 SnackBar 默认 persist=true（永不自动消失）。
+            // 这里必须显式 false，否则提示会一直压住底部导航。
+            persist: false,
+            action: SnackBarAction(
+              label: '分享',
+              onPressed: () => _shareBackup(result),
+            ),
+          ),
+        );
+    } on BackupException catch (e) {
+      _toast('导出失败：${e.message}');
+    } catch (e) {
+      _toast('导出失败：$e');
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  Future<void> _shareBackup(BackupResult result) async {
+    try {
+      await shareBackupFile(result);
+    } catch (e) {
+      _toast('无法调起系统分享：$e');
+    }
   }
 
   @override
@@ -235,15 +285,27 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
 
             const AppSectionHeader('数据与备份', subtitle: '把任务 / 日记 / 闹钟打包带走'),
 
-            // ---------------- 数据与备份（未实现 → 灰化） ----------------
+            // ---------------- 数据与备份 ----------------
             AppCard.group(
-              children: const [
-                AppDisabledTile(
-                  icon: Icons.archive_outlined,
-                  title: '导出全部数据（ZIP）',
-                  reason: '后续迭代开放：任务、日记、闹钟将打包为一个 ZIP',
-                ),
-                AppDisabledTile(
+              children: [
+                if (_exporting)
+                  const AppSettingsTile(
+                    icon: Icons.archive_outlined,
+                    title: '正在导出…',
+                    subtitle: '正在合并 WAL 并打包数据库与设置',
+                    trailing: SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                else
+                  AppActionTile(
+                    icon: Icons.archive_outlined,
+                    title: '导出全部数据（ZIP）',
+                    subtitle: '数据库 + 设置打包，可分享到其他设备',
+                    onTap: _exportData,
+                  ),
+                const AppDisabledTile(
                   icon: Icons.settings_backup_restore,
                   title: '从备份恢复',
                   reason: '后续迭代开放：选择 ZIP 覆盖当前数据',

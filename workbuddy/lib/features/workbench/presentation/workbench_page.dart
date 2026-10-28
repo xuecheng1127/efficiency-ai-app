@@ -7,6 +7,7 @@ import '../../../core/widgets/ui_kit.dart';
 import '../../diary/domain/diary_entry.dart';
 import '../../diary/presentation/diary_list_page.dart';
 import '../../diary/providers/diary_providers.dart';
+import '../../streak/presentation/streak_button.dart';
 import '../../task/domain/task_enums.dart';
 import '../../task/domain/task_instance.dart';
 import '../../task/presentation/task_list_page.dart';
@@ -42,6 +43,8 @@ class WorkbenchPage extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('工作台'),
         actions: [
+          // 火花入口（首页 AppBar 右侧）：🔥 + 连续天数 → 勋章页
+          const StreakButton(),
           IconButton(
             icon: const Icon(Icons.tune),
             tooltip: '配置工作台',
@@ -135,7 +138,9 @@ class _WorkbenchEmpty extends ConsumerWidget {
                 height: 64,
                 decoration: BoxDecoration(
                   color: theme.colorScheme.primary.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(AppDimens.cardRadius * 1.5),
+                  borderRadius: BorderRadius.circular(
+                    AppDimens.cardRadius * 1.5,
+                  ),
                 ),
                 child: Icon(
                   Icons.dashboard_customize_outlined,
@@ -159,7 +164,9 @@ class _WorkbenchEmpty extends ConsumerWidget {
         const AppSectionHeader('预设模式', subtitle: '点一下即生效，之后还能改'),
         for (final preset in kWorkbenchPresets)
           AppCard(
-            padding: const EdgeInsets.symmetric(vertical: AppDimens.cardPadding),
+            padding: const EdgeInsets.symmetric(
+              vertical: AppDimens.cardPadding,
+            ),
             child: AppActionTile(
               icon: _presetIcons[preset.id] ?? Icons.dashboard_outlined,
               title: preset.label,
@@ -239,7 +246,10 @@ class _ModuleCard extends StatelessWidget {
               TextButton(onPressed: onAction, child: Text(actionLabel)),
             ],
           ),
-          Divider(height: AppDimens.sectionGap, color: theme.colorScheme.outlineVariant),
+          Divider(
+            height: AppDimens.sectionGap,
+            color: theme.colorScheme.outlineVariant,
+          ),
           child,
         ],
       ),
@@ -377,14 +387,11 @@ class _TaskPreviewRow extends StatelessWidget {
             ),
           ),
         ),
-        Text(
-          switch (item.status) {
-            TaskStatus.todo => '未开始',
-            TaskStatus.inProgress => '计时中',
-            TaskStatus.done => '已完成',
-          },
-          style: theme.textTheme.labelSmall?.copyWith(color: color),
-        ),
+        Text(switch (item.status) {
+          TaskStatus.todo => '未开始',
+          TaskStatus.inProgress => '计时中',
+          TaskStatus.done => '已完成',
+        }, style: theme.textTheme.labelSmall?.copyWith(color: color)),
       ],
     );
   }

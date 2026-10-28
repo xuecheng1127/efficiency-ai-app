@@ -17,6 +17,12 @@ abstract final class AppColors {
   /// 错误 / 危险 —— 柔红
   static const Color danger = Color(0xFFEF4444);
 
+  /// 火花（连续完成天数）—— 火苗橙
+  static const Color streak = Color(0xFFF97316);
+
+  /// 勋章金（已解锁的奖杯 / 边框）
+  static const Color gold = Color(0xFFD9A21B);
+
   /// 浅色模式页面底色：比卡片暗，卡片才能「浮」在页面之上
   static const Color lightSurface = Color(0xFFF7F8FA);
 

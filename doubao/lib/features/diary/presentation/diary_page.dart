@@ -5,6 +5,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../providers/diary_providers.dart';
 import 'diary_editor_page.dart';
+import 'diary_preview_page.dart';
 
 /// 日记列表页（T22）
 class DiaryPage extends ConsumerWidget {
@@ -68,7 +69,11 @@ class DiaryPage extends ConsumerWidget {
                   ),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => DiaryEditorPage(diaryId: d.id),
+                      builder: (_) => _PreviewWithEditButton(
+                        diaryId: d.id,
+                        title: d.title,
+                        content: d.content,
+                      ),
                     ),
                   ),
                   onLongPress: () async {
@@ -139,6 +144,42 @@ class _HighlightedText extends StatelessWidget {
   }
 }
 
+/// 预览页 + 右上角编辑按钮
+class _PreviewWithEditButton extends StatelessWidget {
+  final int diaryId;
+  final String title;
+  final String content;
+  const _PreviewWithEditButton({
+    required this.diaryId,
+    required this.title,
+    required this.content,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(title.isEmpty ? '日记' : title),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit),
+            tooltip: '编辑',
+            onPressed: () => Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (_) => DiaryEditorPage(diaryId: diaryId),
+              ),
+            ),
+          ),
+        ],
+      ),
+      body: DiaryPreviewPage(
+        title: title,
+        content: content,
+      ),
+    );
+  }
+}
+
 class _DiarySearchDelegate extends SearchDelegate<String> {
   @override
   List<Widget> buildActions(BuildContext context) => [
@@ -188,7 +229,11 @@ class _DiarySearchDelegate extends SearchDelegate<String> {
                   ),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => DiaryEditorPage(diaryId: d.id),
+                      builder: (_) => _PreviewWithEditButton(
+                        diaryId: d.id,
+                        title: d.title,
+                        content: d.content,
+                      ),
                     ),
                   ),
                 );
