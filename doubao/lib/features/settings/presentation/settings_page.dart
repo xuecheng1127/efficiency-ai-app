@@ -1,5 +1,7 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:archive/archive.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -73,6 +75,169 @@ class SettingsPage extends ConsumerWidget {
       if (!context.mounted) return;
       messenger.hideCurrentSnackBar();
       messenger.showSnackBar(SnackBar(content: Text('导出失败: $e'), duration: const Duration(seconds: 5)));
+    }
+  }
+
+  Future<void> _restoreData(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      // 1. 选 zip 文件
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final picked = result.files.first;
+      final bytes = picked.bytes;
+      if (bytes == null) {
+        messenger.showSnackBar(const SnackBar(content: Text('读取文件失败')));
+        return;
+      }
+
+      // 2. 解 zip
+      Archive archive;
+      try {
+        archive = ZipDecoder().decodeBytes(bytes);
+      } catch (_) {
+        messenger.showSnackBar(const SnackBar(content: Text('文件格式不对，不是有效 ZIP')));
+        return;
+      }
+
+      // 3. 找 sqlite 文件
+      ArchiveFile? dbFile;
+      for (final f in archive.files) {
+        if (f.name.endsWith('.sqlite') || f.name.endsWith('.db')) {
+          dbFile = f;
+          break;
+        }
+      }
+      if (dbFile == null) {
+        messenger.showSnackBar(const SnackBar(content: Text('备份里没有数据库文件')));
+        return;
+      }
+
+      // 4. 校验 SQLite 头
+      final dbBytes = dbFile.content as List<int>;
+      final header = String.fromCharCodes(dbBytes.take(16));
+      if (!header.startsWith('SQLite format 3')) {
+        messenger.showSnackBar(const SnackBar(content: Text('备份文件损坏：不是有效的 SQLite 数据库')));
+        return;
+      }
+
+      // 4.1 校验 schema 版本（SQLite 头 offset 60-63 big-endian）
+      try {
+        final uver = ByteData.sublistView(Uint8List.fromList(dbBytes), 60, 64).getUint32(0);
+        if (uver > AppDatabase.instance.schemaVersion) {
+          messenger.showSnackBar(
+            SnackBar(content: Text('备份来自更新版本 (v$uver)，当前版本 (v${AppDatabase.instance.schemaVersion}) 无法恢复')),
+          );
+          return;
+        }
+      } catch (_) {}
+
+      // 5. 二次确认
+      if (!context.mounted) return;
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('确认恢复？'),
+          content: Text(
+            '备份文件：${picked.name}\n'
+            '大小：${(dbBytes.length / 1024).toStringAsFixed(1)} KB\n\n'
+            '这会覆盖当前所有数据！建议先导出当前数据。',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+            TextButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('确认恢复', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+
+      // 6. checkpoint + 备份 + 关闭 + 清理 sidecar + 替换 + 校验 + 回滚
+      messenger.showSnackBar(const SnackBar(content: Text('正在恢复...'), duration: Duration(seconds: 2)));
+      final supportDir = await getApplicationSupportDirectory();
+      final dbPath = p.join(supportDir.path, 'efficiency_app.sqlite');
+      final dbFileObj = File(dbPath);
+      final bakPath = '$dbFileObj.pre_restore.bak';
+
+      // 6.1 先 checkpoint，把 WAL 刷进主库
+      try {
+        await AppDatabase.instance.customStatement('PRAGMA wal_checkpoint(FULL)');
+      } catch (_) {}
+
+      // 6.2 再备份当前库
+      if (await dbFileObj.exists()) {
+        await dbFileObj.copy(bakPath);
+      }
+
+      // 6.3 关闭 DB
+      await AppDatabase.instance.close();
+
+      // 6.4 清理旧 sidecar（-wal / -shm），防止污染新库
+      for (final suffix in ['-wal', '-shm']) {
+        final f = File('$dbPath$suffix');
+        if (await f.exists()) await f.delete();
+      }
+
+      // 6.5 写入新库
+      try {
+        await File(dbPath).writeAsBytes(dbBytes, flush: true);
+      } catch (e) {
+        // 写失败：回滚
+        if (await File(bakPath).exists()) await File(bakPath).copy(dbPath);
+        rethrow;
+      }
+
+      // 6.6 试探性打开新库；失败则回滚
+      bool rollback = false;
+      try {
+        // 重新打开（单例已 close，重新构造）
+        // 这里简单做：直接检查文件头
+        final head = await File(dbPath).openRead().take(16).first;
+        if (!String.fromCharCodes(head).startsWith('SQLite format 3')) {
+          rollback = true;
+        }
+      } catch (_) {
+        rollback = true;
+      }
+
+      if (rollback) {
+        if (await File(bakPath).exists()) {
+          await File(bakPath).copy(dbPath);
+        }
+        // 清理 sidecar
+        for (final suffix in ['-wal', '-shm']) {
+          final f = File('$dbPath$suffix');
+          if (await f.exists()) await f.delete();
+        }
+        if (!context.mounted) return;
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
+          const SnackBar(content: Text('备份不兼容，已回滚到原数据')),
+        );
+        return;
+      }
+
+      if (!context.mounted) return;
+      messenger.hideCurrentSnackBar();
+      // 重建单例，下次访问自动打开新库
+      AppDatabase.resetInstance();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('恢复成功，数据已重载'), duration: Duration(seconds: 5)),
+      );
+    } catch (e, st) {
+      debugPrint('restore failed: $e\n$st');
+      try {
+        final docDir = await getApplicationDocumentsDirectory();
+        final logFile = File(p.join(docDir.path, 'restore_error.log'));
+        await logFile.writeAsString('$e\n$st\n', mode: FileMode.append);
+      } catch (_) {}
+      if (!context.mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('恢复失败: $e'), duration: const Duration(seconds: 5)));
     }
   }
 
@@ -302,8 +467,8 @@ class SettingsPage extends ConsumerWidget {
                   ListTile(
                     leading: const Icon(Icons.restore_outlined),
                     title: const Text('从备份恢复'),
-                    subtitle: const Text('后续迭代开放'),
-                    enabled: false,
+                    subtitle: const Text('从 ZIP 备份恢复数据，会覆盖当前'),
+                    onTap: () => _restoreData(context),
                   ),
                 ],
               ),

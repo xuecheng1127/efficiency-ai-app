@@ -29,6 +29,11 @@ class AppDatabase extends _$AppDatabase {
   static AppDatabase? _instance;
   static AppDatabase get instance => _instance ??= AppDatabase();
 
+  /// 恢复数据库后调用：丢弃旧单例，下次访问重新打开新文件
+  static void resetInstance() {
+    _instance = null;
+  }
+
   static QueryExecutor _openAppDatabase() {
     return LazyDatabase(() async {
       final dir = await getApplicationSupportDirectory();

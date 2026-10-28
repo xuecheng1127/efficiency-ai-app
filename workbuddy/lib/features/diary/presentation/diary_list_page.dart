@@ -8,6 +8,7 @@ import '../../../core/widgets/highlighted_text.dart';
 import '../domain/diary_entry.dart';
 import '../providers/diary_providers.dart';
 import 'diary_editor_page.dart';
+import 'diary_preview_page.dart';
 
 /// 日记列表：按「今天 / 昨天 / 更早」分组 + 关键词搜索（命中高亮）。
 class DiaryListPage extends ConsumerStatefulWidget {
@@ -29,6 +30,15 @@ class _DiaryListPageState extends ConsumerState<DiaryListPage> {
   Future<void> _openEditor({int diaryId = 0}) async {
     await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => DiaryEditorPage(diaryId: diaryId)),
+    );
+  }
+
+  /// 点卡片 → **预览页**（引擎断行）→ 右上角「编辑」再进编辑器。
+  Future<void> _openPreview(DiaryEntry entry) async {
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => DiaryPreviewPage(diaryId: entry.id, initial: entry),
+      ),
     );
   }
 
@@ -175,7 +185,7 @@ class _DiaryListPageState extends ConsumerState<DiaryListPage> {
                     _DiaryCard(
                       row: row,
                       keyword: keyword,
-                      onTap: () => _openEditor(diaryId: row.entry.id),
+                      onTap: () => _openPreview(row.entry),
                       onLongPress: () => _confirmDelete(row.entry),
                     ),
                 ],
