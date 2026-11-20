@@ -1,6 +1,6 @@
 # 定案 → 代码 · 落地校验报告
 
-- 生成时间：2026-11-20 07:40:00
+- 生成时间：2026-11-20 08:30:51
 - 入口：`flutter test test/decisions/`（同一份断言也在全量 `flutter test` 里跑）
 - 扫描：178 个文件（`android/app/src/main` + `lib` + `test/decisions`；扩展名 .kt/.dart/.xml）
 
