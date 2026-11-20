@@ -1,7 +1,7 @@
 name: efficiency_app
 description: "效率助手 V1.2 - 安卓端个人效率工具（任务体系/日记/工具箱/自定义工作台）"
 publish_to: "none"
-version: 1.2.0+2
+version: 1.6.0+6
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -35,7 +35,6 @@ dependencies:
 
   # ---- 平台通道辅助 ----
   path_provider: ^2.1.4
-  package_info_plus: ^8.0.2
   shared_preferences: ^2.3.2
 
   # ---- 农历转换（朋友生日模块，V1.1 使用）----
@@ -50,6 +49,11 @@ dependencies:
   location: ^10.0.2
   flutter_local_notifications: ^22.3.2
   file_picker: ^10.2.4
+  flutter_map: ^8.3.2
+  latlong2: ^0.10.1
+  home_widget: ^0.10.0
+  geolocator_android: 5.2.1
+  geolocator_platform_interface: 4.4.1
 
 dev_dependencies:
   flutter_test:

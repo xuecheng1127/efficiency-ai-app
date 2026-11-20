@@ -77,9 +77,9 @@ class _CalorieGoalPageState extends ConsumerState<CalorieGoalPage> {
         );
     if (!mounted) return;
     Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('目标已更新：$target kcal / 天')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('目标已更新：$target kcal / 天')));
   }
 
   @override

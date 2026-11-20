@@ -20,6 +20,12 @@ final todayTasksProvider =
   return repo.watchTodayTasks();
 });
 
+/// 全部未归档任务模板（R3 全局搜索按标题检索用）
+final allTemplatesProvider = StreamProvider.autoDispose((ref) {
+  final repo = ref.watch(taskRepositoryProvider);
+  return repo.watchAllTasks();
+});
+
 /// 任务统计（供主页横幅展示）
 final taskStatsProvider = Provider<TaskStats>((ref) {
   final tasks = ref.watch(todayTasksProvider);

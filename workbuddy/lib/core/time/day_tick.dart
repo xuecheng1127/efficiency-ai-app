@@ -27,14 +27,18 @@ DateTime dayOnly(DateTime t) => DateTime(t.year, t.month, t.day);
 /// 「今天」流：先吐当天，然后睡到次日零点再吐。
 ///
 /// [clock] 只为测试注入；生产用 `DateTime.now`。
-Stream<DateTime> dayTickStream({DateTime Function() clock = DateTime.now}) async* {
+Stream<DateTime> dayTickStream({
+  DateTime Function() clock = DateTime.now,
+}) async* {
   while (true) {
     final now = clock();
     yield dayOnly(now);
     final wakeAt = nextMidnightAfter(now);
     final wait = wakeAt.difference(now);
     // 时钟被回拨 / 计算异常时不要退化成「0 秒死循环」。
-    await Future<void>.delayed(wait.isNegative ? const Duration(minutes: 1) : wait);
+    await Future<void>.delayed(
+      wait.isNegative ? const Duration(minutes: 1) : wait,
+    );
   }
 }
 

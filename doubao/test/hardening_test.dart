@@ -66,7 +66,7 @@ void main() {
       expect(data.getUint32(0), 8);
     });
     test('更高版本被拒绝', () {
-      const current = 8;
+      const current = 9;
       const backupVersion = 10;
       expect(backupVersion > current, true);
     });

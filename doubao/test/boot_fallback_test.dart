@@ -8,8 +8,8 @@ void main() {
       AppDatabase.resetInstance();
     });
 
-    test('schemaVersion 为 8', () {
-      expect(AppDatabase.instance.schemaVersion, 8);
+    test('schemaVersion 为 9', () {
+      expect(AppDatabase.instance.schemaVersion, 9);
     });
   });
 }

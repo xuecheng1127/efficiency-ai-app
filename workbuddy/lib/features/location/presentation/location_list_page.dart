@@ -17,24 +17,32 @@ import 'location_edit_page.dart';
 class LocationReminderListPage extends ConsumerWidget {
   const LocationReminderListPage({super.key});
 
-  Future<void> _checkPermission(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
+  Future<void> _checkPermission(BuildContext context, WidgetRef ref) async {
     final permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       await Geolocator.requestPermission();
     }
     if (!context.mounted) return;
-    final watcher = ref.read(locationWatcherProvider);
-    final started = await watcher.start();
+
+    // R4：点「开启」= 用户主动要求监测，解除暂停标记并按实际情况起服务
+    final monitor = ref.read(locationMonitorProvider);
+    await monitor.resumeByUserAction();
     if (!context.mounted) return;
+
+    final background = monitor.serviceRunning;
+    final foregroundOnly = ref.read(locationWatcherProvider).isRunning;
+    final started = background || foregroundOnly;
+
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: Text(
-            started ? '定位已就绪，每 30 秒检查一次' : '定位仍不可用：请到系统设置里允许「位置信息」',
+            !started
+                ? '定位仍不可用：请到系统设置里允许「位置信息」'
+                : background
+                ? '后台监测已开启：每 60 秒检查一次，App 关掉也有效'
+                : '定位已就绪：每 30 秒检查一次（仅 App 打开时有效）',
           ),
           action: started
               ? null
@@ -58,7 +66,9 @@ class LocationReminderListPage extends ConsumerWidget {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text('已删除「${reminder.placeName.isEmpty ? reminder.title : reminder.placeName}」'),
+          content: Text(
+            '已删除「${reminder.placeName.isEmpty ? reminder.title : reminder.placeName}」',
+          ),
           action: SnackBarAction(
             label: '撤销',
             onPressed: () => repo.restore(reminder.id),
@@ -108,12 +118,21 @@ class LocationReminderListPage extends ConsumerWidget {
           bottom: AppDimens.sectionGap * 2,
         ),
         children: [
-          const AppSectionHeader('我的地点', subtitle: '每 30 秒检查一次；同一地点 24 小时内只提醒一次'),
+          const AppSectionHeader(
+            '我的地点',
+            subtitle: '后台每 60 秒检查一次，App 关掉也有效；同一地点 24 小时内只提醒一次',
+          ),
           for (final r in reminders)
             _ReminderCard(
               reminder: r,
-              onToggle: (v) =>
-                  ref.read(locationRepositoryProvider).setEnabled(r.id, v),
+              onToggle: (v) async {
+                await ref
+                    .read(locationRepositoryProvider)
+                    .setEnabled(r.id, v);
+                if (!v) return;
+                // 重新打开一条 = 用户又要监测了，解除「通知被划掉」的暂停
+                await ref.read(locationMonitorProvider).resumeByUserAction();
+              },
               onDelete: () => _delete(context, ref, r),
             ),
         ],
@@ -122,7 +141,7 @@ class LocationReminderListPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('途径提醒'),
+        title: Semantics(namesRoute: true, child: const Text('途径提醒')),
         actions: [
           IconButton(
             icon: const Icon(Icons.my_location),
@@ -135,7 +154,9 @@ class LocationReminderListPage extends ConsumerWidget {
         onPressed: () => Navigator.of(context).push<void>(
           MaterialPageRoute(builder: (_) => const LocationEditPage()),
         ),
-        icon: const Icon(Icons.add_location_alt_outlined),
+        icon: const ExcludeSemantics(
+          child: Icon(Icons.add_location_alt_outlined),
+        ),
         label: const Text('添加提醒'),
       ),
       body: Column(
@@ -194,62 +215,89 @@ class _PermissionBannerState extends ConsumerState<_PermissionBanner> {
         (_permission == LocationPermission.whileInUse ||
             _permission == LocationPermission.always);
 
-    final String text;
-    if (_serviceOn == null) {
-      text = '正在检查定位权限…';
-    } else if (_serviceOn == false) {
-      text = '系统定位服务已关闭 —— 提醒不会触发';
-    } else if (ready) {
-      text = '定位已就绪：每 30 秒检查一次，同一地点 24 小时内只提醒一次';
-    } else if (_permission == LocationPermission.deniedForever) {
-      text = '定位权限被永久拒绝 —— 请到系统设置里开启';
-    } else {
-      text = '还没给定位权限 —— 提醒不会触发';
-    }
+    // 后台监测状态（服务 / 前台兜底 / 用户划掉通知后的暂停）
+    final monitor = ref.watch(locationMonitorProvider);
+    return ListenableBuilder(
+      listenable: monitor,
+      builder: (context, _) {
+        final String text;
+        var warn = false;
+        if (_serviceOn == null) {
+          text = '正在检查定位权限…';
+        } else if (_serviceOn == false) {
+          text = '系统定位服务已关闭 —— 提醒不会触发';
+          warn = true;
+        } else if (!ready) {
+          text = _permission == LocationPermission.deniedForever
+              ? '定位权限被永久拒绝 —— 请到系统设置里开启'
+              : '还没给定位权限 —— 提醒不会触发';
+          warn = true;
+        } else if (monitor.enabledCount == 0) {
+          text = '定位已就绪 · 添加一条地点提醒后开始后台监测';
+        } else if (monitor.serviceRunning) {
+          text =
+              '后台监测中：${monitor.enabledCount} 个地点，每 60 秒检查一次（App 关掉也有效）';
+        } else if (monitor.userPaused) {
+          text = '后台监测已暂停（常驻通知被划掉）· 仅 App 打开时每 30 秒检查';
+          warn = true;
+        } else {
+          text = '仅前台监测（后台服务未启动）· App 打开时每 30 秒检查';
+          warn = true;
+        }
 
-    return Container(
-      margin: const EdgeInsets.fromLTRB(
-        AppDimens.pagePadding,
-        AppDimens.chipGap,
-        AppDimens.pagePadding,
-        0,
-      ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppDimens.cardGap,
-        vertical: AppDimens.chipGap,
-      ),
-      decoration: BoxDecoration(
-        color: (ready ? AppColors.success : AppColors.warning).withValues(
-          alpha: 0.10,
-        ),
-        borderRadius: BorderRadius.circular(AppDimens.cardRadius),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            ready ? Icons.check_circle_outline : Icons.warning_amber_rounded,
-            size: 18,
-            color: ready ? AppColors.success : AppColors.warning,
+        final color = warn || !ready ? AppColors.warning : AppColors.success;
+
+        return Container(
+          margin: const EdgeInsets.fromLTRB(
+            AppDimens.pagePadding,
+            AppDimens.chipGap,
+            AppDimens.pagePadding,
+            0,
           ),
-          const SizedBox(width: AppDimens.chipGap),
-          Expanded(
-            child: Text(
-              text,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: ready ? AppColors.success : AppColors.warning,
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppDimens.cardGap,
+            vertical: AppDimens.chipGap,
+          ),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(AppDimens.cardRadius),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                warn || !ready
+                    ? Icons.warning_amber_rounded
+                    : Icons.check_circle_outline,
+                size: 18,
+                color: color,
               ),
-            ),
+              const SizedBox(width: AppDimens.chipGap),
+              Expanded(
+                child: Text(
+                  text,
+                  style: theme.textTheme.bodySmall?.copyWith(color: color),
+                ),
+              ),
+              if (!ready)
+                TextButton(
+                  onPressed: () {
+                    widget.onFix();
+                    _refresh();
+                  },
+                  child: const Text('开启'),
+                )
+              else if (monitor.enabledCount > 0 && !monitor.serviceRunning)
+                TextButton(
+                  onPressed: () async {
+                    await monitor.resumeByUserAction();
+                    await _refresh();
+                  },
+                  child: const Text('恢复'),
+                ),
+            ],
           ),
-          if (!ready)
-            TextButton(
-              onPressed: () {
-                widget.onFix();
-                _refresh();
-              },
-              child: const Text('开启'),
-            ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

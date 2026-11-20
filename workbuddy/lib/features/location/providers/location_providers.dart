@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_provider.dart';
+import '../application/location_monitor.dart';
 import '../application/location_watcher.dart';
 import '../data/location_repository_impl.dart';
 import '../domain/location_reminder.dart';
@@ -14,19 +15,23 @@ final locationRemindersProvider = StreamProvider<List<LocationReminder>>((ref) {
   return ref.watch(locationRepositoryProvider).watchAll();
 });
 
-/// 前台轮询器：**第一次被读取时启动**（App 根部的监听组件会读它）。
+/// 前台轮询器（没有前台服务时的兜底）。
 ///
-/// 用 Provider 而不是在 main 里手动 new：这样它在需要时才创建，
-/// 也能跟着 ProviderScope 一起销毁（`onDispose`），不会泄漏 Timer。
+/// **不再在被读取时自动 start**：R4 起由 [locationMonitorProvider] 统一决定
+/// 「谁在跑」—— 服务能起就停掉它，否则再拉起它。两个都跑会让同一地点
+/// 收到两条通知（服务一条、App 内定时器一条），这是实际发生过的问题。
 final locationWatcherProvider = Provider<LocationWatcher>((ref) {
   final watcher = LocationWatcher(ref.watch(locationRepositoryProvider));
-  unawaitedStart(watcher);
   ref.onDispose(watcher.dispose);
   return watcher;
 });
 
-/// 小工具：避免在 Provider 里写 `unawaited` 需要额外 import。
-void unawaitedStart(LocationWatcher watcher) {
-  // ignore: discarded_futures
-  watcher.start();
-}
+/// 途径提醒的监测总开关：前台服务与前台轮询二选一，并负责把后台状态补回库。
+final locationMonitorProvider = Provider<LocationMonitor>((ref) {
+  final monitor = LocationMonitor(
+    ref.watch(locationRepositoryProvider),
+    ref.watch(locationWatcherProvider),
+  );
+  ref.onDispose(monitor.dispose);
+  return monitor;
+});

@@ -6,8 +6,19 @@ import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../../../core/constants/app_version.dart';
 import '../../../core/database/app_database.dart';
 import '../data/backup_zip.dart';
+
+/// 手动导出的文件名前缀（设置页「导出全部数据」用）。
+const String kManualBackupPrefix = 'efficiency_app_backup_';
+
+/// 自动备份的文件名前缀。**轮转只认这个前缀**，手动导出的包永不被删。
+const String kAutoBackupPrefix = 'auto_backup_';
+
+/// 备份文件所在子目录（`<文档目录>/backups`）。自动备份与手动导出同目录，
+/// 用户在一个地方就能看到全部备份。
+const String kBackupSubdir = 'backups';
 
 /// 导出结果：路径、大小、包内文件 —— SnackBar 与测试都用这份**事实**，
 /// 不在 UI 里再拼一遍字符串。
@@ -64,7 +75,7 @@ class BackupExporter {
     required int schemaVersion,
     Future<Directory> Function()? documentsDirectory,
     Future<Directory> Function()? supportDirectory,
-    this.appVersion = '1.0.0',
+    this.appVersion = kAppVersion,
   }) : _checkpoint = checkpoint,
        _schemaVersion = schemaVersion,
        _documentsDirectory =
@@ -72,9 +83,12 @@ class BackupExporter {
        _supportDirectory = supportDirectory ?? getApplicationSupportDirectory;
 
   /// 绑定真实数据库的构造（生产路径）。
+  ///
+  /// [appVersion] 默认取 [kAppVersion]（与设置页、pubspec 同源），
+  /// 不在备份包里写死版本号 —— 否则恢复确认框会对着 1.4 的包说「应用 1.0.0」。
   factory BackupExporter.forDatabase(
     AppDatabase db, {
-    String appVersion = '1.0.0',
+    String appVersion = kAppVersion,
   }) {
     return BackupExporter(
       // customSelect 走同一条连接，PRAGMA 才会作用在正在使用的库上。
@@ -91,7 +105,13 @@ class BackupExporter {
   final String appVersion;
 
   /// 执行导出。[now] 仅供测试注入固定时间（文件名的确定性）。
-  Future<BackupResult> export({DateTime? now}) async {
+  ///
+  /// [fileNamePrefix] 区分**手动导出**与**自动备份**：自动备份用
+  /// `auto_backup_`，轮转时只删这个前缀的文件，用户手动导出的包一个不动。
+  Future<BackupResult> export({
+    DateTime? now,
+    String fileNamePrefix = kManualBackupPrefix,
+  }) async {
     final stamp = now ?? DateTime.now();
 
     await _checkpoint();
@@ -134,14 +154,14 @@ class BackupExporter {
     // 大文件压缩放后台 isolate：不阻塞 UI。
     final zipBytes = await Isolate.run(() => encodeBackupZip(payload));
 
-    final outDir = Directory(p.join(docs.path, 'backups'));
+    final outDir = Directory(p.join(docs.path, kBackupSubdir));
     if (!outDir.existsSync()) {
       await outDir.create(recursive: true);
     }
     final file = File(
       p.join(
         outDir.path,
-        'efficiency_app_backup_${DateFormat('yyyyMMdd_HHmmss').format(stamp)}.zip',
+        '$fileNamePrefix${DateFormat('yyyyMMdd_HHmmss').format(stamp)}.zip',
       ),
     );
     await file.writeAsBytes(zipBytes, flush: true);

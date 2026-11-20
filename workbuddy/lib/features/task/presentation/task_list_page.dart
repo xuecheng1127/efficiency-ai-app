@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimens.dart';
+import '../../../core/diagnostics/startup_trace.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/ui_kit.dart';
 import '../../alarm/domain/scheduled_alarm.dart';
 import '../../alarm/presentation/alarm_editor.dart';
 import '../../alarm/providers/alarm_providers.dart';
 import '../../diary/presentation/diary_list_page.dart';
+import '../../search/presentation/search_page.dart';
 import '../domain/task_enums.dart';
 import '../domain/task_instance.dart';
 import '../providers/task_providers.dart';
@@ -39,16 +41,46 @@ class _TaskListPageState extends ConsumerState<TaskListPage> {
   /// 去抖窗口：400ms。比一次 tap 的余波长，比人手换目标点短。
   static const Duration _completeCooldown = Duration(milliseconds: 400);
 
-  /// 点击条目：todo → 开始计时；inProgress → 取消计时
+  /// 点击条目：只有「未开始」会开始计时。
+  ///
+  /// 计时中 / 暂停后整行不再响应点击（PHONE-FIX-1）：用户在这一刻要的是
+  /// 「暂停」或「继续」，让整行替用户选一个方向必然有一半是错的；
+  /// 而「点一下取消计时」更是会把已跑的时间清零且不可撤销。
   void _toggle(TaskInstance instance) {
-    final repo = ref.read(taskRepositoryProvider);
-    switch (instance.status) {
-      case TaskStatus.todo:
-        repo.startTimer(instance.id);
-      case TaskStatus.inProgress:
-        repo.cancelTimer(instance.id);
-      case TaskStatus.done:
-        break;
+    if (instance.status != TaskStatus.todo) return;
+    ref.read(taskRepositoryProvider).startTimer(instance.id);
+  }
+
+  /// 暂停 / 继续 / 取消计时：三个动作都走显式按钮，不靠点击整行猜测。
+  void _pause(TaskInstance instance) {
+    ref.read(taskRepositoryProvider).pauseTimer(instance.id);
+  }
+
+  void _resume(TaskInstance instance) {
+    ref.read(taskRepositoryProvider).resumeTimer(instance.id);
+  }
+
+  Future<void> _cancelTimer(BuildContext context, TaskInstance instance) async {
+    // 取消会结束这一轮计时（已跑秒数保留，不会清零）；确认一次避免误触。
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('取消计时'),
+        content: Text('结束「${instance.titleSnapshot}」这次计时吗？已计的时长会保留。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('继续计时'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('取消计时'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await ref.read(taskRepositoryProvider).cancelTimer(instance.id);
     }
   }
 
@@ -94,7 +126,10 @@ class _TaskListPageState extends ConsumerState<TaskListPage> {
   /// 长按已完成的任务：菜单 →「标记为未完成」→ 确认框（UNDO-COMPLETE §1/§2）。
   ///
   /// 菜单只放这一项：删除已有独立按钮、闹钟也有独立按钮，重复列出只会增加误触面。
-  Future<void> _openDoneMenu(BuildContext context, TaskInstance instance) async {
+  Future<void> _openDoneMenu(
+    BuildContext context,
+    TaskInstance instance,
+  ) async {
     final action = await showModalBottomSheet<String>(
       context: context,
       builder: (sheetContext) => SafeArea(
@@ -211,14 +246,17 @@ class _TaskListPageState extends ConsumerState<TaskListPage> {
 
   @override
   Widget build(BuildContext context) {
+    StartupTrace.markOnce('ui.tab.task.build');
     final asyncInstances = ref.watch(todayInstancesProvider);
     final alarmsByTask = ref.watch(alarmsByTaskProvider);
 
     return Scaffold(
       // T22：日记入口放在 AppBar（**不动底部 3 标签**，保持既有导航指纹）
       appBar: AppBar(
-        title: const Text('今日任务'),
+        title: Semantics(namesRoute: true, child: const Text('今日任务')),
         actions: [
+          // 全局搜索入口（R1 任务 2）：四个 tab 的 AppBar 都有，行为一致
+          const SearchAction(),
           IconButton(
             tooltip: '日记',
             icon: const Icon(Icons.menu_book_outlined),
@@ -271,10 +309,12 @@ class _TaskListPageState extends ConsumerState<TaskListPage> {
                       instance: instance,
                       alarm: alarm,
                       onToggle: () => _toggle(instance),
+                      onPause: () => _pause(instance),
+                      onResume: () => _resume(instance),
+                      onCancelTimer: () => _cancelTimer(context, instance),
                       onComplete: () => _complete(context, instance),
                       onDelete: () => _confirmDelete(context, instance),
-                      onAlarm: () =>
-                          _openAlarmEditor(context, instance, alarm),
+                      onAlarm: () => _openAlarmEditor(context, instance, alarm),
                       // 只有已完成的任务才有「标记为未完成」可做
                       onLongPress: instance.status == TaskStatus.done
                           ? () => _openDoneMenu(context, instance)
@@ -291,7 +331,8 @@ class _TaskListPageState extends ConsumerState<TaskListPage> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openAddTask(context),
         tooltip: '新建任务',
-        icon: const Icon(Icons.add),
+        // R3：按钮自带「新建任务」文字，图标纯装饰
+        icon: const ExcludeSemantics(child: Icon(Icons.add)),
         label: const Text('新建任务'),
       ),
     );
@@ -313,64 +354,77 @@ class _TodayProgressHeader extends StatelessWidget {
     final theme = Theme.of(context);
     final double ratio = total == 0 ? 0.0 : done / total;
     final allDone = total > 0 && done >= total;
+    final dateLabel = _dateLabel(DateTime.now());
 
     return AppCard(
       padding: const EdgeInsets.all(AppDimens.pagePadding),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.today_outlined,
-                size: _iconSize,
-                color: theme.colorScheme.primary,
-              ),
-              const SizedBox(width: AppDimens.sectionHeaderGap),
-              // 日期占剩余宽度，窄屏时省略而不是把「已完成 x / y」挤掉
-              Expanded(
-                child: Text(
-                  _dateLabel(DateTime.now()),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall?.copyWith(
+      // R3：整张卡按「日期 + 几比几」一句念完。
+      // 不这么包的话读屏会依次停在「10月18日 · 周六」「已完成 2 / 5」
+      // 和一个只有百分比的进度条上 —— 三个焦点说的其实是同一件事。
+      child: Semantics(
+        container: true,
+        label:
+            '$dateLabel，已完成 $done / $total 项任务'
+            '${allDone ? '，今天的任务全部完成，保持这个节奏' : ''}',
+        excludeSemantics: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                ExcludeSemantics(
+                  child: Icon(
+                    Icons.today_outlined,
+                    size: _iconSize,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: AppDimens.sectionHeaderGap),
+                // 日期占剩余宽度，窄屏时省略而不是把「已完成 x / y」挤掉
+                Expanded(
+                  child: Text(
+                    dateLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Text(
+                  '已完成 $done / $total',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: allDone
+                        ? AppColors.success
+                        : theme.colorScheme.onSurfaceVariant,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+              ],
+            ),
+            const SizedBox(height: AppDimens.sectionHeaderGap),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppDimens.cardRadius),
+              child: LinearProgressIndicator(
+                value: ratio,
+                minHeight: _progressHeight,
+                color: AppColors.success,
+                // 轨道用中性色：之前用 success@16%，导致 0/1 时整条浅绿、看起来像"已满"
+                // （D4 状态色要能区分状态，不能把"没开始"也涂成绿的）。
+                backgroundColor: theme.colorScheme.surfaceContainerHighest,
               ),
+            ),
+            if (allDone) ...[
+              const SizedBox(height: AppDimens.sectionHeaderGap),
               Text(
-                '已完成 $done / $total',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: allDone
-                      ? AppColors.success
-                      : theme.colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
+                '今天的任务全部完成，保持这个节奏',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: AppColors.success,
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: AppDimens.sectionHeaderGap),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppDimens.cardRadius),
-            child: LinearProgressIndicator(
-              value: ratio,
-              minHeight: _progressHeight,
-              color: AppColors.success,
-              // 轨道用中性色：之前用 success@16%，导致 0/1 时整条浅绿、看起来像"已满"
-              // （D4 状态色要能区分状态，不能把"没开始"也涂成绿的）。
-              backgroundColor: theme.colorScheme.surfaceContainerHighest,
-            ),
-          ),
-          if (allDone) ...[
-            const SizedBox(height: AppDimens.sectionHeaderGap),
-            Text(
-              '今天的任务全部完成，保持这个节奏',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: AppColors.success,
-              ),
-            ),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -388,19 +442,28 @@ class _LoadingState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const CircularProgressIndicator(),
-          const SizedBox(height: AppDimens.cardGap),
-          Text(
-            '正在加载今日任务…',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+    // R3：加载态是「状态」，用 liveRegion 让读屏在它出现时报一次，
+    // 否则用户只能听见「旁边一片空白」。
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      label: '正在加载今日任务',
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: AppDimens.cardGap),
+            ExcludeSemantics(
+              child: Text(
+                '正在加载今日任务…',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -421,11 +484,19 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            EmptyState(icon: Icons.cloud_off, title: '加载失败', subtitle: message),
+            // R3：错误是「状态变化」，用 liveRegion 让读屏在它出现时报一次
+            Semantics(
+              liveRegion: true,
+              child: EmptyState(
+                icon: Icons.cloud_off,
+                title: '加载失败',
+                subtitle: message,
+              ),
+            ),
             const SizedBox(height: AppDimens.cardGap),
             FilledButton.icon(
               onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
+              icon: const ExcludeSemantics(child: Icon(Icons.refresh)),
               label: const Text('重试'),
             ),
           ],

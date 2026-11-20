@@ -40,7 +40,9 @@ class WorkbenchConfig {
 
   /// 应用一个预设（空态卡片、配置页都用）。
   Future<void> applyPreset(WorkbenchPreset preset) {
-    return _settings.patch(workbenchModules: workbenchModuleIds(preset.modules));
+    return _settings.patch(
+      workbenchModules: workbenchModuleIds(preset.modules),
+    );
   }
 
   /// 直接设定模块列表（顺序敏感）。

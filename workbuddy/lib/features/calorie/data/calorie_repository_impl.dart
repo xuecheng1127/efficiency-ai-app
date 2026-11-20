@@ -34,9 +34,7 @@ class CalorieRepositoryImpl implements CalorieRepository {
         (t) => OrderingTerm.asc(t.createdAt),
         (t) => OrderingTerm.asc(t.id),
       ]);
-    return query.watch().map(
-      (rows) => [for (final r in rows) _toDomain(r)],
-    );
+    return query.watch().map((rows) => [for (final r in rows) _toDomain(r)]);
   }
 
   @override
@@ -51,18 +49,20 @@ class CalorieRepositoryImpl implements CalorieRepository {
   }) async {
     final n = name.trim();
     if (n.isEmpty || kcal <= 0) return null;
-    return _db.into(_db.calorieEntries).insert(
-      db.CalorieEntriesCompanion.insert(
-        entryDate: dateOnly(date),
-        meal: meal.id,
-        name: n,
-        kcal: kcal,
-        proteinG: Value(proteinG < 0 ? 0 : proteinG),
-        carbG: Value(carbG < 0 ? 0 : carbG),
-        fatG: Value(fatG < 0 ? 0 : fatG),
-        createdAt: DateTime.now(),
-      ),
-    );
+    return _db
+        .into(_db.calorieEntries)
+        .insert(
+          db.CalorieEntriesCompanion.insert(
+            entryDate: dateOnly(date),
+            meal: meal.id,
+            name: n,
+            kcal: kcal,
+            proteinG: Value(proteinG < 0 ? 0 : proteinG),
+            carbG: Value(carbG < 0 ? 0 : carbG),
+            fatG: Value(fatG < 0 ? 0 : fatG),
+            createdAt: DateTime.now(),
+          ),
+        );
   }
 
   @override
@@ -82,11 +82,13 @@ class CalorieRepositoryImpl implements CalorieRepository {
   /// 用原生 SQL 是因为 Drift 的表达能力在这里要绕：需要「按 name 分组取最大 id」。
   @override
   Future<List<String>> recentNames({int limit = 20}) async {
-    final rows = await _db.customSelect(
-      'SELECT name, MAX(id) AS last_id FROM calorie_entries '
-      'WHERE deleted_at IS NULL GROUP BY name ORDER BY last_id DESC LIMIT ?',
-      variables: [Variable<int>(limit)],
-    ).get();
+    final rows = await _db
+        .customSelect(
+          'SELECT name, MAX(id) AS last_id FROM calorie_entries '
+          'WHERE deleted_at IS NULL GROUP BY name ORDER BY last_id DESC LIMIT ?',
+          variables: [Variable<int>(limit)],
+        )
+        .get();
     return [for (final r in rows) r.read<String>('name')];
   }
 }

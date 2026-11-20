@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimens.dart';
+import '../../../core/diagnostics/startup_trace.dart';
 import '../../../core/widgets/ui_kit.dart';
 import '../../diary/domain/diary_entry.dart';
 import '../../diary/presentation/diary_list_page.dart';
 import '../../diary/providers/diary_providers.dart';
+import '../../search/presentation/search_page.dart';
 import '../../streak/presentation/streak_button.dart';
 import '../../task/domain/task_enums.dart';
 import '../../task/domain/task_instance.dart';
@@ -38,11 +40,13 @@ class WorkbenchPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final modules = ref.watch(workbenchModulesProvider);
+    StartupTrace.markOnce('ui.tab.workbench.build');
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('工作台'),
+        title: Semantics(namesRoute: true, child: const Text('工作台')),
         actions: [
+          const SearchAction(),
           // 火花入口（首页 AppBar 右侧）：🔥 + 连续天数 → 勋章页
           const StreakButton(),
           IconButton(
@@ -133,19 +137,22 @@ class _WorkbenchEmpty extends ConsumerWidget {
           ),
           child: Column(
             children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(
-                    AppDimens.cardRadius * 1.5,
+              // 纯装饰插画：读屏念「图片」没有任何信息量
+              ExcludeSemantics(
+                child: Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(
+                      AppDimens.cardRadius * 1.5,
+                    ),
                   ),
-                ),
-                child: Icon(
-                  Icons.dashboard_customize_outlined,
-                  size: 30,
-                  color: theme.colorScheme.primary,
+                  child: Icon(
+                    Icons.dashboard_customize_outlined,
+                    size: 30,
+                    color: theme.colorScheme.primary,
+                  ),
                 ),
               ),
               const SizedBox(height: AppDimens.sectionGap),
@@ -243,7 +250,19 @@ class _ModuleCard extends StatelessWidget {
                   ],
                 ),
               ),
-              TextButton(onPressed: onAction, child: Text(actionLabel)),
+              // 「查看全部」/「去创建」离开上下文就看不出是哪个模块 ——
+              // 一屏有两张模块卡时，读屏念两个「查看全部」等于没信息。
+              Semantics(
+                container: true,
+                button: true,
+                label: '$actionLabel$title',
+                excludeSemantics: true,
+                onTap: onAction,
+                child: TextButton(
+                  onPressed: onAction,
+                  child: Text(actionLabel),
+                ),
+              ),
             ],
           ),
           Divider(
@@ -368,34 +387,40 @@ class _TaskPreviewRow extends StatelessWidget {
       TaskStatus.done => AppColors.success,
     };
 
-    return Row(
-      children: [
-        Icon(
-          isDone ? Icons.check_circle_rounded : Icons.circle_outlined,
-          size: 16,
-          color: color,
-        ),
-        const SizedBox(width: AppDimens.chipGap),
-        // 标题吃掉剩余宽度（超长时省略），与右侧状态之间留一格间距：
-        // 没有这一格，长标题的「…」会紧贴「未开始」，看起来像两个词粘在一起。
-        Expanded(
-          child: Text(
-            item.titleSnapshot,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: isDone ? theme.colorScheme.onSurfaceVariant : null,
-              decoration: isDone ? TextDecoration.lineThrough : null,
+    return MergeSemantics(
+      // 一行「☑ 买牛奶 未开始」对读屏应该是**一句**，而不是先停在一个
+      // 没有文字的圆点上、再分三次停在标题和状态词上。
+      child: Row(
+        children: [
+          ExcludeSemantics(
+            child: Icon(
+              isDone ? Icons.check_circle_rounded : Icons.circle_outlined,
+              size: 16,
+              color: color,
             ),
           ),
-        ),
-        const SizedBox(width: AppDimens.chipGap),
-        Text(switch (item.status) {
-          TaskStatus.todo => '未开始',
-          TaskStatus.inProgress => '计时中',
-          TaskStatus.done => '已完成',
-        }, style: theme.textTheme.labelSmall?.copyWith(color: color)),
-      ],
+          const SizedBox(width: AppDimens.chipGap),
+          // 标题吃掉剩余宽度（超长时省略），与右侧状态之间留一格间距：
+          // 没有这一格，长标题的「…」会紧贴「未开始」，看起来像两个词粘在一起。
+          Expanded(
+            child: Text(
+              item.titleSnapshot,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: isDone ? theme.colorScheme.onSurfaceVariant : null,
+                decoration: isDone ? TextDecoration.lineThrough : null,
+              ),
+            ),
+          ),
+          const SizedBox(width: AppDimens.chipGap),
+          Text(switch (item.status) {
+            TaskStatus.todo => '未开始',
+            TaskStatus.inProgress => '计时中',
+            TaskStatus.done => '已完成',
+          }, style: theme.textTheme.labelSmall?.copyWith(color: color)),
+        ],
+      ),
     );
   }
 }

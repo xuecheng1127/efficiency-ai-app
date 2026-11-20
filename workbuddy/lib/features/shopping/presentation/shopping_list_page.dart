@@ -210,7 +210,7 @@ class _ShoppingListPageState extends ConsumerState<ShoppingListPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('采购清单'),
+        title: Semantics(namesRoute: true, child: const Text('采购清单')),
         actions: [
           IconButton(
             icon: const Icon(Icons.restore),
@@ -243,7 +243,9 @@ class _ShoppingListPageState extends ConsumerState<ShoppingListPage> {
                 decoration: InputDecoration(
                   border: InputBorder.none,
                   icon: const Icon(Icons.add_shopping_cart),
-                  hintText: '买什么？打完按回车就进清单',
+                  // 1.3 字号 + 图标挤在同一行时，「打完按回车就进清单」会被截成
+                  // 「…」；缩短到 5 个字，提示完整可见（回车即添加的行为不变）
+                  hintText: '买什么？回车添加',
                   suffixIcon: IconButton(
                     icon: const Icon(Icons.add_circle_outline),
                     tooltip: '添加',
@@ -358,44 +360,59 @@ class _ItemRow extends StatelessWidget {
           child: InkWell(
             onTap: onTap,
             onLongPress: onLongPress,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppDimens.pagePadding,
-                vertical: AppDimens.cardGap,
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    done
-                        ? Icons.check_circle_rounded
-                        : Icons.radio_button_unchecked,
-                    size: 22,
-                    color: done ? AppColors.success : AppColors.todo,
+            // R3：一行 = 一个「已买 / 未买」的可勾选项。合并成一句读，
+            // 并把「勾掉了没有」以 checked 状态暴露（TalkBack 会念「已勾选」）。
+            child: MergeSemantics(
+              child: Semantics(
+                container: true,
+                checked: done,
+                label:
+                    '${item.name}${item.quantity > 1 ? '，${item.quantity} 件' : ''}',
+                excludeSemantics: true,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppDimens.pagePadding,
+                    vertical: AppDimens.cardGap,
                   ),
-                  const SizedBox(width: AppDimens.cardGap),
-                  Expanded(
-                    child: Text(
-                      item.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        color: done
-                            ? theme.colorScheme.onSurfaceVariant
-                            : null,
-                        decoration: done ? TextDecoration.lineThrough : null,
+                  child: Row(
+                    children: [
+                      ExcludeSemantics(
+                        child: Icon(
+                          done
+                              ? Icons.check_circle_rounded
+                              : Icons.radio_button_unchecked,
+                          size: 22,
+                          color: done ? AppColors.success : AppColors.todo,
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: AppDimens.cardGap),
+                      Expanded(
+                        child: Text(
+                          item.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: done
+                                ? theme.colorScheme.onSurfaceVariant
+                                : null,
+                            decoration: done
+                                ? TextDecoration.lineThrough
+                                : null,
+                          ),
+                        ),
+                      ),
+                      if (item.quantity > 1) ...[
+                        const SizedBox(width: AppDimens.chipGap),
+                        Text(
+                          '×${item.quantity}',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                  if (item.quantity > 1) ...[
-                    const SizedBox(width: AppDimens.chipGap),
-                    Text(
-                      '×${item.quantity}',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ],
+                ),
               ),
             ),
           ),

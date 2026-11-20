@@ -49,6 +49,25 @@ class LocationReminder {
   final DateTime? notifiedAt;
   final DateTime createdAt;
   final DateTime? deletedAt;
+
+  /// 只换「上次提醒时间」。
+  ///
+  /// 后台 isolate 不能开 drift 连接去写 `notified_at`（两个连接同时写同一个
+  /// SQLite 文件容易互锁），所以「上次提醒」在后台记在 JSON 状态文件里；
+  /// 判定时要把它套回实体上，才有这条最小拷贝方法。
+  LocationReminder withNotifiedAt(DateTime? at) => LocationReminder(
+    id: id,
+    title: title,
+    placeName: placeName,
+    latitude: latitude,
+    longitude: longitude,
+    radiusMeters: radiusMeters,
+    triggerOn: triggerOn,
+    enabled: enabled,
+    notifiedAt: at,
+    createdAt: createdAt,
+    deletedAt: deletedAt,
+  );
 }
 
 /// 一次触发（给 UI 弹 SnackBar / 发通知用）。
@@ -67,12 +86,7 @@ class LocationTrigger {
 }
 
 /// 两点间距离（米）。haversine。
-double distanceMeters(
-  double lat1,
-  double lon1,
-  double lat2,
-  double lon2,
-) {
+double distanceMeters(double lat1, double lon1, double lat2, double lon2) {
   const earthRadius = 6371000.0;
   final dLat = _rad(lat2 - lat1);
   final dLon = _rad(lon2 - lon1);

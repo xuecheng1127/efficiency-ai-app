@@ -13,6 +13,7 @@ import 'add_task_page.dart';
 import 'widgets/task_card.dart';
 import '../../streak/providers/streak_provider.dart';
 import '../../streak/presentation/medals_page.dart';
+import '../../search/presentation/search_page.dart';
 
 /// 主页 · 任务体系（P0 核心）
 ///
@@ -42,36 +43,49 @@ class TaskListPage extends ConsumerWidget {
       taskTimerProvider.select((s) => s.title),
     );
 
-    return Scaffold(
+    return Semantics(
+      namesRoute: true,
+      label: '今天',
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('今天'),
         // 顶部进度信息
         actions: [
+          // 全局搜索：跨任务 / 日记 / 备忘录 / 采购 / 生日
+          IconButton(
+            icon: const Icon(Icons.search),
+            tooltip: '全局搜索',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const SearchPage()),
+            ),
+          ),
           // 火花：点进勋章页
           Consumer(
             builder: (context, ref, _) {
               final s = ref.watch(streakProvider);
+              final streak = s.maybeWhen(data: (d) => d.current, orElse: () => 0);
               return Padding(
                 padding: const EdgeInsets.only(right: 8),
-                child: InkWell(
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const MedalsPage()),
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    child: Row(
-                      children: [
-                        const Text('🔥', style: TextStyle(fontSize: 16)),
-                        const SizedBox(width: 4),
-                        Text(
-                          s.maybeWhen(
-                            data: (d) => '${d.current}',
-                            orElse: () => '0',
+                child: Semantics(
+                  label: '连续完成 $streak 天，点击查看勋章',
+                  button: true,
+                  child: InkWell(
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const MedalsPage()),
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      child: Row(
+                        children: [
+                          const ExcludeSemantics(child: Text('🔥', style: TextStyle(fontSize: 16))),
+                          const SizedBox(width: 4),
+                          Text(
+                            '$streak',
+                            style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -114,7 +128,7 @@ class TaskListPage extends ConsumerWidget {
                     const SizedBox(height: 16),
                     FilledButton.icon(
                       onPressed: () => ref.invalidate(todayTasksProvider),
-                      icon: const Icon(Icons.refresh),
+                      icon: const ExcludeSemantics(child: Icon(Icons.refresh)),
                       label: const Text('重试'),
                     ),
                   ],
@@ -173,8 +187,9 @@ class TaskListPage extends ConsumerWidget {
         onPressed: () => _openAddPage(context),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
+        icon: const ExcludeSemantics(child: Icon(Icons.add)),
         label: const Text('新建任务'),
+      ),
       ),
     );
   }
@@ -360,18 +375,20 @@ class _ActiveTimerBanner extends ConsumerWidget {
           child: Row(
             children: [
               // 呼吸圆点动画（进行中标识）
-              Container(
-                width: 10,
-                height: 10,
-                decoration: const BoxDecoration(
-                  color: AppColors.primary,
-                  shape: BoxShape.circle,
-                ),
-              )
-                  .animate(onPlay: (c) => c.repeat())
-                  .fadeIn(duration: 600.ms, curve: Curves.easeInOut)
-                  .then()
-                  .fadeOut(duration: 600.ms, curve: Curves.easeInOut),
+              ExcludeSemantics(
+                child: Container(
+                  width: 10,
+                  height: 10,
+                  decoration: const BoxDecoration(
+                    color: AppColors.primary,
+                    shape: BoxShape.circle,
+                  ),
+                )
+                    .animate(onPlay: (c) => c.repeat())
+                    .fadeIn(duration: 600.ms, curve: Curves.easeInOut)
+                    .then()
+                    .fadeOut(duration: 600.ms, curve: Curves.easeInOut),
+              ),
               const SizedBox(width: 12),
               // 任务名 + 实时计时（秒数由内部 Consumer 单独刷新）
               Expanded(

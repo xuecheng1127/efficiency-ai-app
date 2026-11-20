@@ -165,7 +165,7 @@ class _CaloriePageState extends ConsumerState<CaloriePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('每日热量'),
+        title: Semantics(namesRoute: true, child: const Text('每日热量')),
         actions: [
           IconButton(
             icon: const Icon(Icons.flag_outlined),
@@ -341,9 +341,21 @@ class _TodaySummary extends StatelessWidget {
             const SizedBox(height: AppDimens.cardGap),
             Row(
               children: [
-                _Macro(label: '蛋白', grams: totals.proteinG, color: AppColors.active),
-                _Macro(label: '碳水', grams: totals.carbG, color: AppColors.warning),
-                _Macro(label: '脂肪', grams: totals.fatG, color: AppColors.danger),
+                _Macro(
+                  label: '蛋白',
+                  grams: totals.proteinG,
+                  color: AppColors.active,
+                ),
+                _Macro(
+                  label: '碳水',
+                  grams: totals.carbG,
+                  color: AppColors.warning,
+                ),
+                _Macro(
+                  label: '脂肪',
+                  grams: totals.fatG,
+                  color: AppColors.danger,
+                ),
               ],
             ),
           ],

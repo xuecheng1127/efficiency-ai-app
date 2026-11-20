@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
+import 'package:efficiency_app/core/constants/app_version.dart';
 import 'package:efficiency_app/features/backup/application/export_backup.dart';
 import 'package:efficiency_app/features/backup/data/backup_zip.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -49,6 +50,19 @@ void main() {
   }
 
   group('BackupExporter · 导出', () {
+    test('版本号默认取 kAppVersion，不在包里写死 1.0.0', () {
+      // 回归：备份 manifest 曾经默认 '1.0.0'，导致 1.4 的包在恢复确认框里
+      // 显示「应用 1.0.0」——用户在报告问题时说的版本号和实际装的对不上。
+      final exporter = BackupExporter(
+        checkpoint: () async {},
+        schemaVersion: 8,
+        documentsDirectory: () async => docs,
+        supportDirectory: () async => support,
+      );
+      expect(exporter.appVersion, kAppVersion);
+      expect(exporter.appVersion, isNot('1.0.0'));
+    });
+
     test('生成带时间戳的 zip，包含数据库 + 设置 + manifest', () async {
       writeDatabase(List.filled(2048, 7));
       File(

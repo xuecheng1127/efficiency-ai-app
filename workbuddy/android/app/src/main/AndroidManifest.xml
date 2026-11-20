@@ -40,13 +40,18 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
+    <!-- ===================== R4 途径提醒的后台触发 =====================
+         foregroundServiceType=location 的专属权限（API 34+，普通权限，不弹窗）。
+         **没有它，startForeground() 会抛 SecurityException**，服务起不来。 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
     <!-- 开机重建（T11）：重启后 AlarmManager 会被系统清空，必须靠这条广播触发全量重排。
          广播由系统投递，第三方应用无法伪造。 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:label="efficiency_app"
-        android:name="${applicationName}"
+        android:name=".EfficiencyApplication"
         android:icon="@mipmap/ic_launcher">
 
         <activity
@@ -125,6 +130,22 @@
                 android:value="alarm_ringing_until_dismissed_or_auto_stop" />
         </service>
 
+        <!-- ============ R4 途径提醒的常驻前台服务（flutter_foreground_task）============
+             **服务名不能改**：插件用这个全限定名 startForeground/绑定自身。
+             foregroundServiceType=location：
+               - 语义正好是「在后台持续获取位置」，不需要 specialUse 那种用途说明；
+               - 前置条件（API 34 起）：ACCESS_FINE_LOCATION 或 ACCESS_COARSE_LOCATION
+                 已授权，且 FOREGROUND_SERVICE_LOCATION 权限已声明（上面已加）。
+                 任一不满足，Android 直接抛 SecurityException。
+             exported=false：只由本应用自己启动。
+
+             注意：它与上面的 AlarmService（specialUse）是**两个独立服务**，互不影响 ——
+             响铃服务只在闹钟响的那几分钟存在，本服务只在「有启用中的途径提醒」时存在。 -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
         <!-- ============ T11 开机重建 ============
              重启后 AlarmManager 被清空，靠这两个广播把 scheduled_alarms 里的闹钟全量重排。
 
@@ -160,6 +181,24 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
+        </receiver>
+
+        <!-- ============ R2 桌面小组件（今日任务 4x2）============
+             exported=true 是必须的：APPWIDGET_UPDATE 由**桌面/系统**（另一个 UID）投递，
+             不导出则连「添加到桌面」那一下都收不到。
+             appwidget.provider 指向 res/xml/today_tasks_widget_info.xml（尺寸 / 刷新周期 / 初始布局）。
+             数据由 Flutter 侧写入 SharedPreferences("HomeWidgetPreferences")，
+             这里只负责 RemoteViews 排版（见 TodayTasksWidgetProvider.kt 顶部说明）。 -->
+        <receiver
+            android:name=".widget.TodayTasksWidgetProvider"
+            android:label="@string/widget_title"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/today_tasks_widget_info" />
         </receiver>
 
         <!-- Don't delete the meta-data below.

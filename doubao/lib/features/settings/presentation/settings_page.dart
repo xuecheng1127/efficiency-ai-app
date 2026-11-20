@@ -11,6 +11,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/services/alarm_service.dart';
+import '../../../core/services/auto_backup_service.dart';
 import '../../task/providers/task_providers.dart';
 import '../providers/settings_provider.dart';
 
@@ -245,7 +246,10 @@ class SettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
 
-    return Scaffold(
+    return Semantics(
+      namesRoute: true,
+      label: '设置',
+      child: Scaffold(
       appBar: AppBar(title: const Text('设置')),
       body: settings.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -262,7 +266,7 @@ class SettingsPage extends ConsumerWidget {
               child: Column(
                 children: [
                   ListTile(
-                    leading: const Icon(Icons.palette_outlined),
+                    leading: const ExcludeSemantics(child: Icon(Icons.palette_outlined)),
                     title: const Text('外观'),
                     trailing: DropdownButton<ThemeMode>(
                       value: s.themeMode,
@@ -292,7 +296,7 @@ class SettingsPage extends ConsumerWidget {
                   ),
                   const Divider(height: 1),
                   ListTile(
-                    leading: const Icon(Icons.repeat_outlined),
+                    leading: const ExcludeSemantics(child: Icon(Icons.repeat_outlined)),
                     title: const Text('新任务默认重复规则'),
                     trailing: DropdownButton<int>(
                       value: s.defaultRepeatRule,
@@ -380,7 +384,7 @@ class SettingsPage extends ConsumerWidget {
                   ),
                   const Divider(height: 1),
                   ListTile(
-                    leading: const Icon(Icons.timer_outlined),
+                    leading: const ExcludeSemantics(child: Icon(Icons.timer_outlined)),
                     title: const Text('贪睡间隔'),
                     trailing: DropdownButton<int>(
                       value: s.snoozeMinutes,
@@ -401,7 +405,7 @@ class SettingsPage extends ConsumerWidget {
                   ),
                   const Divider(height: 1),
                   ListTile(
-                    leading: const Icon(Icons.music_note_outlined),
+                    leading: const ExcludeSemantics(child: Icon(Icons.music_note_outlined)),
                     title: const Text('闹钟铃音'),
                     subtitle: const Text('轻柔纯音乐，前 3 秒渐强'),
                     trailing: DropdownButton<String>(
@@ -427,7 +431,7 @@ class SettingsPage extends ConsumerWidget {
                   ),
                   const Divider(height: 1),
                   ListTile(
-                    leading: const Icon(Icons.volume_up_outlined),
+                    leading: const ExcludeSemantics(child: Icon(Icons.volume_up_outlined)),
                     title: const Text('闹钟音量'),
                     subtitle: Text('${s.alarmVolume}%'),
                     trailing: SizedBox(
@@ -457,15 +461,17 @@ class SettingsPage extends ConsumerWidget {
             _Card(
               child: Column(
                 children: [
+                  const _AutoBackupTile(),
+                  const Divider(height: 1),
                   ListTile(
-                    leading: const Icon(Icons.archive_outlined),
+                    leading: const ExcludeSemantics(child: Icon(Icons.archive_outlined)),
                     title: const Text('导出全部数据 (ZIP)'),
                     subtitle: const Text('打包数据库与日记，可分享或备份'),
                     onTap: () => _exportData(context),
                   ),
                   const Divider(height: 1),
                   ListTile(
-                    leading: const Icon(Icons.restore_outlined),
+                    leading: const ExcludeSemantics(child: Icon(Icons.restore_outlined)),
                     title: const Text('从备份恢复'),
                     subtitle: const Text('从 ZIP 备份恢复数据，会覆盖当前'),
                     onTap: () => _restoreData(context),
@@ -479,7 +485,7 @@ class SettingsPage extends ConsumerWidget {
             const _SectionHeader('关于'),
             _Card(
               child: ListTile(
-                leading: const Icon(Icons.info_outline),
+                leading: const ExcludeSemantics(child: Icon(Icons.info_outline)),
                 title: const Text('效率助手 V1.2'),
                 subtitle: const Text('专注 · 记录 · 成长'),
                 trailing: const Icon(Icons.chevron_right),
@@ -487,6 +493,7 @@ class SettingsPage extends ConsumerWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -517,6 +524,62 @@ class SettingsPage extends ConsumerWidget {
   }
 }
 
+/// 自动备份开关：显示上次备份距今天数，开关读写 SharedPreferences
+class _AutoBackupTile extends StatefulWidget {
+  const _AutoBackupTile();
+
+  @override
+  State<_AutoBackupTile> createState() => _AutoBackupTileState();
+}
+
+class _AutoBackupTileState extends State<_AutoBackupTile> {
+  bool _enabled = true;
+  int? _days;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    // 后台自动备份在首帧后异步完成，延迟重读一次以刷新「上次备份」文案
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) _load();
+    });
+  }
+
+  Future<void> _load() async {
+    final enabled = await AutoBackupService.instance.isEnabled();
+    final days = await AutoBackupService.instance.daysSinceLastBackup();
+    if (!mounted) return;
+    setState(() {
+      _enabled = enabled;
+      _days = days;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lastText = _days == null
+        ? '尚未备份过'
+        : (_days == 0 ? '今天刚备份过' : '上次备份：$_days 天前');
+    return SwitchListTile(
+      secondary: const Icon(Icons.backup_outlined),
+      title: const Text('自动备份'),
+      subtitle: Text('每 7 天自动备份一份，保留最近 4 份 · $lastText'),
+      value: _enabled,
+      activeTrackColor: AppColors.primary,
+      onChanged: _loading
+          ? null
+          : (v) async {
+              await AutoBackupService.instance.setEnabled(v);
+              if (!mounted) return;
+              setState(() => _enabled = v);
+            },
+    );
+  }
+}
+
 class _SectionHeader extends StatelessWidget {
   final String text;
   const _SectionHeader(this.text);
@@ -527,12 +590,14 @@ class _SectionHeader extends StatelessWidget {
       padding: const EdgeInsets.only(left: 4, bottom: 8),
       child: Row(
         children: [
-          Container(
-            width: 3,
-            height: 16,
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.circular(2),
+          ExcludeSemantics(
+            child: Container(
+              width: 3,
+              height: 16,
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
           ),
           const SizedBox(width: 8),

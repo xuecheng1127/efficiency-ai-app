@@ -12,7 +12,10 @@ class ToolboxPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Semantics(
+      namesRoute: true,
+      label: '扩展工具箱',
+      child: Scaffold(
       appBar: AppBar(title: const Text('扩展工具箱')),
       body: ListView(
         physics: const BouncingScrollPhysics(),
@@ -65,6 +68,7 @@ class ToolboxPage extends StatelessWidget {
           ),
         ],
       ),
+      ),
     );
   }
 }
@@ -86,19 +90,22 @@ class _PluginTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return MergeSemantics(
+      child: Card(
       child: ListTile(
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: (available ? AppColors.success : AppColors.primary)
-                .withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(10),
+        leading: ExcludeSemantics(
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: (available ? AppColors.success : AppColors.primary)
+                  .withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: available ? AppColors.success : AppColors.primary),
           ),
-          child: Icon(icon, color: available ? AppColors.success : AppColors.primary),
         ),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(
@@ -118,6 +125,7 @@ class _PluginTile extends StatelessWidget {
           backgroundColor: available ? AppColors.success.withValues(alpha: 0.1) : null,
         ),
         onTap: onTap,
+      ),
       ),
     );
   }

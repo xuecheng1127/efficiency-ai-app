@@ -22,3 +22,8 @@ t*.xml
 
 # 个人配置
 *.log
+
+# 签名密钥（绝不提交）
+key.properties
+*.jks
+*.keystore

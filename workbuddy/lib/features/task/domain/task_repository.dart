@@ -20,6 +20,18 @@ abstract interface class TaskRepository {
   /// 开始计时（实例，自动切为进行中）。
   Future<void> startTimer(int instanceId);
 
+  /// 暂停计时（PHONE-FIX-1）。
+  ///
+  /// 语义：把「本段已跑秒数」结算进 `accumulatedSeconds`，然后清空 `startedAt`
+  /// —— 状态仍是 `inProgress`，于是「`inProgress` + `startedAt == null`」就是暂停态。
+  /// 幂等：没有在跑（`startedAt == null`）时直接返回，不重复累加。
+  Future<void> pauseTimer(int instanceId);
+
+  /// 继续计时（从暂停处接着走，`accumulatedSeconds` 不清零）。
+  ///
+  /// 幂等：已经在跑（`startedAt != null`）时不覆盖起点，避免把秒表偷偷往回拨。
+  Future<void> resumeTimer(int instanceId);
+
   /// 完成实例（归档耗时并切为已完成）。
   Future<void> completeInstance(int instanceId);
 

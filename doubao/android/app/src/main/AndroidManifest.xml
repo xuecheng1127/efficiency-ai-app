@@ -87,12 +87,16 @@
             </intent-filter>
         </receiver>
 
-        <!-- 前台服务：任务后台持续计时（模块1 P0，flutter_foreground_task 8.x）
-             Android 14+ 必须声明 foregroundServiceType；计时属 dataSync 场景 -->
+        <!-- 前台服务：任务后台持续计时（模块1 P0，flutter_foreground_task 11.x）
+             Android 14+ 必须声明 foregroundServiceType；计时属 dataSync 场景。
+             R4 途径提醒同一 pravera ForegroundService 以 location 类型启动
+             （serviceTypes 运行时传入），故清单需同时声明 dataSync|location，
+             否则 API 35 上 startForeground 抛 IllegalArgumentException：
+             foregroundServiceType is not a subset of manifest attribute -->
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:exported="false"
-            android:foregroundServiceType="dataSync"
+            android:foregroundServiceType="dataSync|location"
             android:stopWithTask="false" />
 
         <!-- T13b：闹钟响铃前台服务
@@ -103,6 +107,18 @@
             android:exported="false"
             android:foregroundServiceType="mediaPlayback"
             android:stopWithTask="false" />
+
+        <!-- R3：今日任务桌面小组件（4×2） -->
+        <receiver
+            android:name=".widget.TodayWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/today_widget_info" />
+        </receiver>
 
         <meta-data
             android:name="flutterEmbedding"

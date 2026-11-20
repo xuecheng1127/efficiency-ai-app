@@ -7,6 +7,7 @@ import '../../features/alarm/data/alarm_repository_impl.dart';
 import '../../features/birthday/application/birthday_reminders.dart';
 import '../../features/birthday/data/birthday_repository_impl.dart';
 import '../../features/task/data/task_repository_impl.dart';
+import '../diagnostics/startup_trace.dart';
 import '../notifications/app_notifications.dart';
 import '../platform/alarm_channel.dart';
 import '../settings/app_settings.dart';
@@ -35,10 +36,16 @@ class BootResult {
 ///
 /// 顺序与旧 `main()` 完全一致（惰性 backfill → 闹钟对齐 → 清洗过期一次性闹钟
 /// → 通知/生日重排 → 设置），保证「重启后行为」没有变化。
-Future<BootResult> bootApp({File? dbFile, SettingsStore? settingsOverride}) async {
+Future<BootResult> bootApp({
+  File? dbFile,
+  SettingsStore? settingsOverride,
+}) async {
+  StartupTrace.mark('boot.start');
   final file = dbFile ?? await AppDatabase.defaultFile();
+  StartupTrace.mark('boot.pathResolved');
 
   final db = await AppDatabase.open(file: file);
+  StartupTrace.mark('boot.dbConstructed');
   try {
     await AppDatabase.assertReadable(db);
   } catch (_) {
@@ -46,13 +53,16 @@ Future<BootResult> bootApp({File? dbFile, SettingsStore? settingsOverride}) asyn
     await db.close();
     rethrow;
   }
+  StartupTrace.mark('boot.dbReadable');
 
   // 惰性补齐今日及缺失实例（幂等，可安全重复执行，见 T01 规格 §3）
   await TaskRepositoryImpl(db).backfill(DateTime.now());
+  StartupTrace.mark('boot.backfill');
 
   // T10 证据 #5：进程启动时从 scheduled_alarms 表完整读回闹钟并打印。
   final alarmRepository = AlarmRepositoryImpl(db);
   final alarms = await alarmRepository.loadAll();
+  StartupTrace.mark('boot.alarmsLoaded');
   final report = StringBuffer(
     'startup reload: ${alarms.length} alarm(s) from table scheduled_alarms',
   );
@@ -69,6 +79,7 @@ Future<BootResult> bootApp({File? dbFile, SettingsStore? settingsOverride}) asyn
       '${exact ? "档位 A 精确（setExactAndAllowWhileIdle）" : "档位 B 近似（setWindow 60s）"}',
     );
     await AlarmScheduler.rescheduleAll();
+    StartupTrace.mark('boot.rescheduleAll');
     alarmNativeLog(
       'startup rescheduleAll invoked (parameter source = scheduled_alarms table)',
     );
@@ -78,18 +89,21 @@ Future<BootResult> bootApp({File? dbFile, SettingsStore? settingsOverride}) asyn
 
   // T11：清理「已经过去的一次性闹钟」（原生先跳过，Dart 再删记录）。
   await alarmRepository.pruneExpiredOnce(DateTime.now());
+  StartupTrace.mark('boot.pruneExpired');
 
   // 工具箱插件：本地通知 + 生日提醒重排（失败不影响启动）。
   try {
     await AppNotifications.init();
     final birthdays = await BirthdayRepositoryImpl(db).all();
     await BirthdayReminders.syncAll(birthdays);
+    StartupTrace.mark('boot.remindersSynced');
   } catch (e) {
     alarmLog('birthday reminder sync skipped: $e');
   }
 
   // 设置存储：在 runApp 之前打开，保证 UI 首帧就是真实设置。
   final settings = settingsOverride ?? await SettingsStore.open();
+  StartupTrace.mark('boot.settingsOpened');
 
   debugPrint('[Boot] database ready: ${file.path}');
   return BootResult(db: db, settings: settings, dbFile: file);

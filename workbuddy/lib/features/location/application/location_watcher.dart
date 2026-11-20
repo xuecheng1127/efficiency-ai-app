@@ -3,37 +3,35 @@ import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 
 import '../../../core/notifications/app_notifications.dart';
-import '../domain/location_reminder.dart';
+import '../data/geofence_state_store.dart';
+import '../domain/geofence_pulse.dart';
 import '../domain/location_repository.dart';
 
 /// ============================================================================
-/// 途径提醒的前台轮询器
+/// 途径提醒的前台轮询器（**兜底链路**）
 /// ============================================================================
 ///
-/// 规格实现路径：**先前台轮询（30 秒）**，后续再上前台服务。
-/// 所以这里刻意用 `Timer.periodic`，不申请后台定位 ——
-/// App 在后台时 Dart 定时器会被系统挂起，本来也不会偷偷耗电。
+/// R4 之后主链路是前台服务（后台也能触发）。这个类只在服务起不来时兜底：
+/// 权限被拒、系统限制前台服务、或非 Android 平台。
 ///
-/// 三件事：
-/// 1. 每 30 秒取一次当前位置（中等精度，省电，200m 半径够用）；
-/// 2. 对每条提醒做进入/离开判定 + 24 小时去重（逻辑在 domain，可单测）；
-/// 3. 触发时：发本地通知 + 往 [triggers] 里推一条（前台用 SnackBar 再提示一次）。
+/// 与后台链路共用同一套判定（`runPulse`）和同一份状态缓存
+/// （`GeofenceStateStore`）—— 否则两条链路交替工作时「上次在内/在外」
+/// 各记各的，用户会收到重复提醒，或者干脆收不到。
 class LocationWatcher {
-  LocationWatcher(this._repo);
+  LocationWatcher(this._repo, {GeofenceStateStore? state})
+    : _state = state ?? GeofenceStateStore();
 
   final LocationRepository _repo;
+  final GeofenceStateStore _state;
 
-  final StreamController<LocationTrigger> _triggers =
-      StreamController<LocationTrigger>.broadcast();
+  final StreamController<LocationAlert> _alerts =
+      StreamController<LocationAlert>.broadcast();
 
   /// 前台监听它弹 SnackBar。
-  Stream<LocationTrigger> get triggers => _triggers.stream;
+  Stream<LocationAlert> get alerts => _alerts.stream;
 
   Timer? _timer;
   bool _busy = false;
-
-  /// 每个围栏上一次是否在内（内存态；重启后按"在外"处理）。
-  final Map<int, bool> _lastInside = {};
 
   /// 最近一次位置（页面显示"当前坐标"用）。
   Position? lastPosition;
@@ -56,7 +54,7 @@ class LocationWatcher {
 
   Future<void> dispose() async {
     stop();
-    await _triggers.close();
+    await _alerts.close();
   }
 
   /// 权限 + 定位服务是否就绪。
@@ -97,27 +95,30 @@ class LocationWatcher {
       lastPosition = position;
 
       final reminders = await _repo.allEnabled();
+      if (reminders.isEmpty) return;
+
+      final snapshot = await _state.load();
       final now = DateTime.now();
-      for (final r in reminders) {
-        final decision = evaluate(
-          reminder: r,
-          lat: position.latitude,
-          lon: position.longitude,
-          lastInside: _lastInside[r.id],
-          now: now,
-        );
-        _lastInside[r.id] = decision.inside;
+      final result = runPulse(
+        reminders: reminders,
+        latitude: position.latitude,
+        longitude: position.longitude,
+        lastInside: snapshot.inside,
+        lastNotified: snapshot.notified,
+        now: now,
+      );
 
-        final trigger = decision.trigger;
-        if (trigger == null) continue;
+      await _state.saveInside(result.insideById);
 
-        await _repo.markNotified(r.id, now);
+      for (final alert in result.alerts) {
+        await _repo.markNotified(alert.reminderId, now);
+        await _state.saveNotified(alert.reminderId, now);
         await AppNotifications.show(
-          id: AppNotifications.locationIdBase + r.id,
-          title: r.title,
-          body: trigger.message,
+          id: AppNotifications.locationIdBase + alert.reminderId,
+          title: alert.title,
+          body: alert.message,
         );
-        if (!_triggers.isClosed) _triggers.add(trigger);
+        if (!_alerts.isClosed) _alerts.add(alert);
       }
     } catch (_) {
       // 定位失败（无 GPS / 超时）不打扰用户：下一拍继续

@@ -29,19 +29,21 @@ class EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 图标：柔和圆底承载
-            Container(
-              width: 88,
-              height: 88,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.08),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: 40, color: AppColors.primary),
-            )
-                .animate()
-                .fadeIn(duration: 300.ms, curve: AppMotion.easeOutCubic)
-                .scale(begin: const Offset(0.9, 0.9), end: const Offset(1, 1)),
+            // 图标：柔和圆底承载（纯装饰，不进入读屏）
+            ExcludeSemantics(
+              child: Container(
+                width: 88,
+                height: 88,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 40, color: AppColors.primary),
+              )
+                  .animate()
+                  .fadeIn(duration: 300.ms, curve: AppMotion.easeOutCubic)
+                  .scale(begin: const Offset(0.9, 0.9), end: const Offset(1, 1)),
+            ),
             const SizedBox(height: 20),
             Text(
               message,

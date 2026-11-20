@@ -70,6 +70,48 @@ class TaskRepositoryImpl implements TaskRepository {
   }
 
   @override
+  Future<void> pauseTimer(int instanceId) async {
+    await _db.transaction(() async {
+      final row = await (_db.select(
+        _db.taskInstances,
+      )..where((t) => t.id.equals(instanceId))).getSingleOrNull();
+      if (row == null) return;
+      final start = row.startedAt;
+
+      // 没有在跑（未开始 / 已暂停 / 已完成）：什么都不做。
+      // 幂等很重要 —— 按钮连点两下不能把同一段时间结算两遍。
+      if (row.status != TaskStatus.inProgress.name || start == null) return;
+
+      final seg = DateTime.now().difference(start).inSeconds;
+      await (_db.update(
+        _db.taskInstances,
+      )..where((t) => t.id.equals(instanceId))).write(
+        TaskInstancesCompanion(
+          // 只累加正数：手机改过时间导致 now < start 时，不让累计秒数倒退
+          accumulatedSeconds: Value(
+            row.accumulatedSeconds + (seg > 0 ? seg : 0),
+          ),
+          startedAt: const Value<DateTime?>(null),
+        ),
+      );
+    });
+  }
+
+  @override
+  Future<void> resumeTimer(int instanceId) {
+    // 两个条件都写在 WHERE 里：进行中 **且** 当前没有起点（= 暂停态）。
+    // 已经在跑的不会被回拨（否则这一段的秒数就白跑了），
+    // 已完成的也不会被重新拉起来。
+    return (_db.update(_db.taskInstances)..where(
+          (t) =>
+              t.id.equals(instanceId) &
+              t.status.equals('inProgress') &
+              t.startedAt.isNull(),
+        ))
+        .write(TaskInstancesCompanion(startedAt: Value(DateTime.now())));
+  }
+
+  @override
   Future<void> startTimer(int instanceId) {
     return (_db.update(
       _db.taskInstances,
@@ -129,15 +171,32 @@ class TaskRepositoryImpl implements TaskRepository {
   }
 
   @override
-  Future<void> cancelTimer(int instanceId) {
-    return (_db.update(
-      _db.taskInstances,
-    )..where((t) => t.id.equals(instanceId))).write(
-      TaskInstancesCompanion(
-        status: const Value('todo'),
-        startedAt: const Value<DateTime?>(null),
-      ),
-    );
+  Future<void> cancelTimer(int instanceId) async {
+    // 取消也要结算本段秒数（此前直接丢掉 —— 「已经学了一小时，点取消就归零」）。
+    // 已暂停的条目没有本段可结算，只是把状态退回未开始。
+    await _db.transaction(() async {
+      final row = await (_db.select(
+        _db.taskInstances,
+      )..where((t) => t.id.equals(instanceId))).getSingleOrNull();
+      if (row == null) return;
+
+      final start = row.startedAt;
+      final seg = start == null
+          ? 0
+          : DateTime.now().difference(start).inSeconds;
+
+      await (_db.update(
+        _db.taskInstances,
+      )..where((t) => t.id.equals(instanceId))).write(
+        TaskInstancesCompanion(
+          status: const Value('todo'),
+          startedAt: const Value<DateTime?>(null),
+          accumulatedSeconds: Value(
+            row.accumulatedSeconds + (seg > 0 ? seg : 0),
+          ),
+        ),
+      );
+    });
   }
 
   @override
@@ -183,39 +242,51 @@ class _BackfillDataSourceAdapter implements engine.BackfillDataSource {
   }
 
   @override
-  Future<DateTime?> lastOccurrenceDate(int templateId) async {
+  Future<Map<int, DateTime>> lastOccurrenceDates() async {
+    // 一条 SQL 取「每个模板的最大 occurrenceDate」。
+    //
+    // 不用 `WHERE template_id IN (...)`：模板可能上千个，会撞 SQLite 的
+    // 绑定参数上限（老设备是 999）。整表 GROUP BY 只是一次索引扫描，
+    // 比 1000 次跨 isolate 往返便宜两个数量级（R5 实测 3.1s → 40ms）。
+    final maxDate = _db.taskInstances.occurrenceDate.max();
     final rows =
-        await (_db.select(_db.taskInstances)
-              ..where((t) => t.templateId.equals(templateId))
-              ..orderBy([(t) => OrderingTerm.desc(t.occurrenceDate)])
-              ..limit(1))
+        await (_db.selectOnly(_db.taskInstances)
+              ..addColumns([_db.taskInstances.templateId, maxDate])
+              ..groupBy([_db.taskInstances.templateId]))
             .get();
-    return rows.isEmpty ? null : rows.first.occurrenceDate;
+
+    final result = <int, DateTime>{};
+    for (final row in rows) {
+      final id = row.read(_db.taskInstances.templateId);
+      final date = row.read(maxDate);
+      if (id != null && date != null) result[id] = date;
+    }
+    return result;
   }
 
   @override
-  Future<void> upsertInstance(TaskTemplate template, DateTime date) async {
-    // 已存在（含软删除）则不做任何修改 —— 禁止覆盖用户已有的计时/完成状态（禁止清单第 2 条）
-    final existing =
-        await (_db.select(_db.taskInstances)..where(
-              (t) =>
-                  t.templateId.equals(template.id) &
-                  t.occurrenceDate.equals(engine.dateOnly(date)),
-            ))
-            .getSingleOrNull();
-    if (existing != null) return;
-
-    await _db
-        .into(_db.taskInstances)
-        .insert(
-          TaskInstancesCompanion.insert(
-            templateId: template.id,
-            occurrenceDate: engine.dateOnly(date),
-            titleSnapshot: template.title,
-            typeSnapshot: template.type.name,
-            caloriePerMinuteSnapshot: Value(template.caloriePerMinute),
-            status: TaskStatus.todo.name,
-          ),
-        );
+  Future<void> insertInstances(List<engine.BackfillDraft> drafts) {
+    // 批量插入，`insertOrIgnore` 对应原来的「已存在则不动」：
+    // 软删除的行也占着 UNIQUE(templateId, occurrenceDate)，所以不会把用户
+    // 删掉的实例又插回来（禁止清单第 2 条）。
+    return _db.batch((batch) {
+      batch.insertAll(
+        _db.taskInstances,
+        [
+          for (final draft in drafts)
+            TaskInstancesCompanion.insert(
+              templateId: draft.template.id,
+              occurrenceDate: engine.dateOnly(draft.date),
+              titleSnapshot: draft.template.title,
+              typeSnapshot: draft.template.type.name,
+              caloriePerMinuteSnapshot: Value(
+                draft.template.caloriePerMinute,
+              ),
+              status: TaskStatus.todo.name,
+            ),
+        ],
+        mode: InsertMode.insertOrIgnore,
+      );
+    });
   }
 }

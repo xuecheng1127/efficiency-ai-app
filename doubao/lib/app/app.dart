@@ -7,6 +7,7 @@ import '../core/services/alarm_service.dart';
 import '../core/theme/app_theme.dart';
 import '../features/settings/providers/settings_provider.dart';
 import '../features/splash/splash_page.dart';
+import '../features/toolbox/data/location_reminder_fg_service.dart';
 import '../shell/main_shell.dart';
 
 /// 应用根组件
@@ -43,6 +44,12 @@ class _EfficiencyAppState extends ConsumerState<EfficiencyApp>
     _rescheduleAllOnStartup();
     // 启动时记录初始档位
     _refreshExactAlarmTier();
+    // R4：App 启动即恢复途径提醒后台监测（存在启用中的提醒才会起服务）
+    _restoreLocationService();
+  }
+
+  Future<void> _restoreLocationService() async {
+    await LocationReminderFgService.syncWithLogs();
   }
 
   Future<void> _rescheduleAllOnStartup() async {
@@ -81,7 +88,7 @@ class _EfficiencyAppState extends ConsumerState<EfficiencyApp>
     final settings = ref.watch(settingsProvider);
     final themeMode = settings.valueOrNull?.themeMode ?? ThemeMode.system;
 
-    return MaterialApp(
+    final app = MaterialApp(
       title: '效率助手',
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
@@ -100,6 +107,17 @@ class _EfficiencyAppState extends ConsumerState<EfficiencyApp>
           : const MainShell()
               .animate()
               .fadeIn(duration: 260.ms, curve: AppMotion.easeOutCubic),
+    );
+
+    // 大字号适配：读取系统字号因子并限制上限 1.3，避免卡片/按钮文字撑破
+    final baseScaler = MediaQuery.of(context).textScaler;
+    final baseFactor = baseScaler.scale(14) / 14;
+    final factor = baseFactor.clamp(1.0, 1.3);
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(
+        textScaler: TextScaler.linear(factor),
+      ),
+      child: app,
     );
   }
 }

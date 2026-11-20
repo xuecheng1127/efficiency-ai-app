@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 桌面小组件（4x2）用的颜色。
+     小组件渲染在**桌面进程**里，拿不到 Flutter 的 Theme，只能用资源；
+     深色/浅色两套分别放在 values / values-night，跟随系统而不是跟随 App 内主题
+     （桌面是系统的一部分，用户切系统深色时期待小组件一起变）。 -->
+<resources>
+    <color name="widget_bg">#FFF7F8FA</color>
+    <color name="widget_border">#14000000</color>
+    <color name="widget_text_primary">#FF1B1B1F</color>
+    <color name="widget_text_secondary">#FF5A5D66</color>
+    <color name="widget_accent">#FF2E7D32</color>
+    <color name="widget_track">#1F000000</color>
+</resources>

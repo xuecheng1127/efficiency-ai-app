@@ -95,7 +95,7 @@ class _MemoListPageState extends ConsumerState<MemoListPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('备忘录'),
+        title: Semantics(namesRoute: true, child: const Text('备忘录')),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(58),
           child: Padding(
@@ -135,7 +135,7 @@ class _MemoListPageState extends ConsumerState<MemoListPage> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openEditor(),
-        icon: const Icon(Icons.add),
+        icon: const ExcludeSemantics(child: Icon(Icons.add)),
         label: const Text('记一条'),
       ),
       body: asyncMemos.when(
@@ -160,43 +160,64 @@ class _MemoListPageState extends ConsumerState<MemoListPage> {
           final pinned = filtered.where((m) => m.pinned).toList();
           final others = filtered.where((m) => !m.pinned).toList();
 
-          return ListView(
+          // R5：与日记列表同因同治 —— `ListView(children: [...])` 会在打开这一页
+          // 的那一帧同步构建 500 张卡片，改用 builder 只构建可见的十来张。
+          // 索引里隔一个存表头标记（_SectionHeaderSpec），渲染时按类型分支。
+          final items = <Object>[
+            if (pinned.isNotEmpty) ...[
+              _SectionHeaderSpec(
+                label: '置顶',
+                count: pinned.length,
+              ),
+              ...pinned,
+            ],
+            if (others.isNotEmpty) ...[
+              _SectionHeaderSpec(
+                label: pinned.isEmpty ? '全部备忘' : '其他',
+                count: others.length,
+              ),
+              ...others,
+            ],
+          ];
+
+          return ListView.builder(
             padding: const EdgeInsets.fromLTRB(
               AppDimens.pagePadding,
               8,
               AppDimens.pagePadding,
               96,
             ),
-            children: [
-              if (pinned.isNotEmpty) ...[
-                _SectionHeader(label: '置顶', count: pinned.length),
-                for (final memo in pinned)
-                  _MemoCard(
-                    memo: memo,
-                    keyword: keyword,
-                    onTap: () => _openEditor(memoId: memo.id),
-                    onLongPress: () => _showActions(memo),
-                  ),
-              ],
-              if (others.isNotEmpty) ...[
-                _SectionHeader(
-                  label: pinned.isEmpty ? '全部备忘' : '其他',
-                  count: others.length,
+            itemCount: items.length,
+            itemBuilder: (context, index) {
+              final item = items[index];
+              if (item is _SectionHeaderSpec) {
+                return _SectionHeader(label: item.label, count: item.count);
+              }
+              final memo = item as Memo;
+              // R3：一张备忘卡（置顶标记 / 内容 / 时间）合并成一个焦点
+              return MergeSemantics(
+                key: ValueKey<int>(memo.id),
+                child: _MemoCard(
+                  memo: memo,
+                  keyword: keyword,
+                  onTap: () => _openEditor(memoId: memo.id),
+                  onLongPress: () => _showActions(memo),
                 ),
-                for (final memo in others)
-                  _MemoCard(
-                    memo: memo,
-                    keyword: keyword,
-                    onTap: () => _openEditor(memoId: memo.id),
-                    onLongPress: () => _showActions(memo),
-                  ),
-              ],
-            ],
+              );
+            },
           );
         },
       ),
     );
   }
+}
+
+/// 列表里「分组表头」的占位数据（R5：列表拍平成索引数组后，用它区分表头与卡片）。
+class _SectionHeaderSpec {
+  const _SectionHeaderSpec({required this.label, required this.count});
+
+  final String label;
+  final int count;
 }
 
 class _SectionHeader extends StatelessWidget {

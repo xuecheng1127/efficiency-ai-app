@@ -20,7 +20,7 @@ part 'app_database.g.dart';
 @DriftDatabase(tables: [TaskTemplates, TaskInstances, ScheduledAlarms, Diaries, Memos, ShoppingItems, Birthdays, LocationReminders, CalorieEntries])
 class AppDatabase extends _$AppDatabase {
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   /// 供测试注入的内存/临时 executor
   AppDatabase([QueryExecutor? executor])
@@ -42,10 +42,37 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
+  /// 性能索引（R1）：覆盖高频查询列，IF NOT EXISTS 可重复执行
+  static const List<String> _indexStatements = [
+    'CREATE INDEX IF NOT EXISTS idx_task_instances_date_status '
+        'ON task_instances(occurrence_date, status)',
+    'CREATE INDEX IF NOT EXISTS idx_task_instances_template '
+        'ON task_instances(template_id)',
+    'CREATE INDEX IF NOT EXISTS idx_diaries_date ON diaries(diary_date)',
+    'CREATE INDEX IF NOT EXISTS idx_memos_deleted_pinned '
+        'ON memos(deleted_at, pinned)',
+    'CREATE INDEX IF NOT EXISTS idx_shopping_checked ON shopping_items(checked)',
+    'CREATE INDEX IF NOT EXISTS idx_calorie_entry_date '
+        'ON calorie_entries(entry_date)',
+    'CREATE INDEX IF NOT EXISTS idx_location_enabled '
+        'ON location_reminders(enabled)',
+    'CREATE INDEX IF NOT EXISTS idx_birthdays_month_day '
+        'ON birthdays(birthday_month, birthday_day)',
+  ];
+
+  Future<void> _createIndexes(Migrator m) async {
+    for (final sql in _indexStatements) {
+      await m.database.customStatement(sql);
+    }
+  }
+
   /// 迁移：v1→v2 建 scheduled_alarms 表
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onCreate: (m) => m.createAll(),
+        onCreate: (m) async {
+          await m.createAll();
+          await _createIndexes(m);
+        },
         onUpgrade: (m, from, to) async {
           if (from < 2) {
             await m.createTable(scheduledAlarms);
@@ -67,6 +94,9 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 8) {
             await m.createTable(calorieEntries);
+          }
+          if (from < 9) {
+            await _createIndexes(m);
           }
         },
       );

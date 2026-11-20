@@ -1,7 +1,7 @@
 name: efficiency_app
 description: "个人效率工具 V1.0 —— 任务管理 / 富文本日记 / 扩展工具箱 / 自定义工作台"
 publish_to: "none"
-version: 1.0.0+1
+version: 1.8.0+8
 
 environment:
   sdk: ^3.8.0
@@ -46,6 +46,12 @@ dependencies:
   latlong2: ^0.10.1
   archive: ^3.6.1
   share_plus: ^13.3.1
+  file_picker: ^13.4.0
+  home_widget: ^0.10.0
+  flutter_foreground_task: ^8.17.0
+  # R4：后台 isolate 直读 location_reminders（只跑一条 SELECT，不打开 drift）
+  sqlite3: ^3.7.1
+  shared_preferences: ^2.5.6
 
 dev_dependencies:
   flutter_test:
@@ -65,3 +71,45 @@ flutter:
   # assets:
   #   - assets/sounds/   # 内置闹钟铃音（轻柔纯音乐 3-5 首）
   #   - assets/images/   # 启动 Logo、空状态插画
+
+# ============================================================================
+# 依赖锁定：sqlite3 的预编译二进制
+# ============================================================================
+# sqlite3 3.x 用 Dart「hooks」在构建时从 GitHub Releases 下载预编译库
+# （Windows 测试要 sqlite3.x64.windows.dll，Android 要各 ABI 的 libsqlite3.so）。
+# 本机到 github.com 的连接会随机超时，构建/测试直接失败：
+#   "Building assets for package:sqlite3 failed … 信号灯超时"
+#
+# 对策不是重试，而是**不让它下载**（见下面的 hooks 段）：
+#   - Android：dlopen("libsqlite3.so")，命中的是 sqlite3_flutter_libs 通过 Gradle
+#     打进 APK 的那份（所以那个依赖必须保留）；
+#   - Windows（只有单测跑）：用系统自带的 winsqlite3.dll。
+# 这样构建完全离线，也不再受 GitHub 可达性影响。
+#
+# 版本仍然锁在 3.7.1：drift 2.35 只要求 ^3.4.0，而 3.7.1 是 cache 里已有、
+# 且与当前 drift 生成代码配合验证过的那一版。
+dependency_overrides:
+  sqlite3: 3.7.1
+
+  # path_provider_android 2.3.0 起把实现换成了 JNI（`package:jni`）。
+  # 在本工程里它一调用就抛：
+  #   Exception in Java: java.lang.ClassNotFoundException
+  #   Didn't find class "android/content/Context" on path:
+  #   DexPathList[[zip file ".../base.apk"]]
+  # —— JNI 侧用一个只含 APK 的 DexClassLoader 去查框架类，必然查不到，
+  # 结果就是 release 包一启动就卡在「本地数据打不开」。
+  # 2.3.1 的 changelog 写着「修掉 release 下的 ClassNotFoundException」，
+  # 但在本机 release 包里仍然复现，所以退回最后一个「纯 MethodChannel」版本 2.2.23。
+  # 判断依据：2.2.23 的 Android 实现里没有任何 jni 依赖，走的是 Pigeon 通道。
+  path_provider_android: 2.2.23
+
+hooks:
+  user_defines:
+    sqlite3:
+      # 按平台指定「用系统/应用自带的库」，其余平台仍回落到默认（下载）。
+      source:
+        android: system
+        windows: system
+      # 仅 Windows 需要改名：系统库叫 winsqlite3.dll（Windows 10+ 自带）。
+      name:
+        windows: winsqlite3

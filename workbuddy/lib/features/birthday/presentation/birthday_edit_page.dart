@@ -294,7 +294,11 @@ class _BirthdayEditPageState extends ConsumerState<BirthdayEditPage> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.error_outline, size: 18, color: AppColors.danger),
+                  const Icon(
+                    Icons.error_outline,
+                    size: 18,
+                    color: AppColors.danger,
+                  ),
                   const SizedBox(width: AppDimens.chipGap),
                   Expanded(
                     child: Text(
@@ -332,20 +336,7 @@ class _BirthdayEditPageState extends ConsumerState<BirthdayEditPage> {
   }
 
   static String _lunarMonthName(int month) {
-    const names = [
-      '正',
-      '二',
-      '三',
-      '四',
-      '五',
-      '六',
-      '七',
-      '八',
-      '九',
-      '十',
-      '冬',
-      '腊',
-    ];
+    const names = ['正', '二', '三', '四', '五', '六', '七', '八', '九', '十', '冬', '腊'];
     return names[(month - 1).clamp(0, 11)];
   }
 }

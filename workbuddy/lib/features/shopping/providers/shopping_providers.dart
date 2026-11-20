@@ -16,7 +16,8 @@ final shoppingItemsProvider = StreamProvider<List<ShoppingItem>>((ref) {
 
 /// 分组后的展示数据。放在 Provider 里是为了让页面 `build` 只做渲染。
 final shoppingGroupsProvider = Provider<List<ShoppingGroup>>((ref) {
-  final items = ref.watch(shoppingItemsProvider).value ?? const <ShoppingItem>[];
+  final items =
+      ref.watch(shoppingItemsProvider).value ?? const <ShoppingItem>[];
   return groupShoppingItems(items);
 });
 

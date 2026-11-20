@@ -9,6 +9,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimens.dart';
 import '../../../core/notifications/app_notifications.dart';
 import '../../../core/widgets/ui_kit.dart';
+import '../application/location_monitor.dart';
 import '../domain/location_reminder.dart';
 import '../providers/location_providers.dart';
 import 'location_map_picker_page.dart';
@@ -95,25 +96,42 @@ class _LocationEditPageState extends ConsumerState<LocationEditPage> {
     setState(() => _locating = true);
     try {
       if (!await _ensurePermission()) return;
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 20),
-        ),
-      );
+      // 降级链（PHONE-FIX-1）：真机在室内 20 秒拿不到高精度 fix 是常态，
+      // 直接抛「取位置失败」等于功能不可用。先试实时定位，超时退回上次已知位置。
+      Position? pos;
+      try {
+        pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 20),
+          ),
+        );
+      } catch (_) {
+        pos = null;
+      }
+      pos ??= await Geolocator.getLastKnownPosition();
       if (!mounted) return;
+      if (pos == null) {
+        setState(
+          () => _error =
+              '暂时取不到当前位置（可能在室内）。'
+              '可以点「地图选点」拖动选，或直接填经纬度。',
+        );
+        return;
+      }
       setState(() {
-        _lat.text = pos.latitude.toStringAsFixed(6);
+        _lat.text = pos!.latitude.toStringAsFixed(6);
         _lon.text = pos.longitude.toStringAsFixed(6);
         if (_place.text.trim().isEmpty) _place.text = '当前位置';
       });
+      final resolved = pos;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
             content: Text(
-              '已取到坐标：${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}'
-              '（精度约 ${pos.accuracy.round()}m）',
+              '已取到坐标：${resolved.latitude.toStringAsFixed(5)}, ${resolved.longitude.toStringAsFixed(5)}'
+              '（精度约 ${resolved.accuracy.round()}m）',
             ),
           ),
         );
@@ -142,7 +160,17 @@ class _LocationEditPageState extends ConsumerState<LocationEditPage> {
     });
   }
 
+  /// 保存。
+  ///
+  /// **R4B 的三条铁律**（v1.6 就是在这里永久卡住的）：
+  /// 1. 只有「写库」这一步决定保存成败，其余步骤一律不影响；
+  /// 2. 任何一步抛异常都必须复位 `_saving` —— 否则按钮永久停在「保存中…」，
+  ///    而数据其实已经进库了（用户会以为没存上，再点一次就多一条）；
+  /// 3. 通知权限 / 后台服务启动放在**页面退出之后**，各带超时，
+  ///    绝不能让「服务起不来」把保存流程拖死。
   Future<void> _save() async {
+    if (_saving) return;
+
     final title = _title.text.trim();
     final lat = double.tryParse(_lat.text.trim());
     final lon = double.tryParse(_lon.text.trim());
@@ -159,37 +187,77 @@ class _LocationEditPageState extends ConsumerState<LocationEditPage> {
       _saving = true;
       _error = null;
     });
+
+    // 退出页面要用的东西先取好：pop 之后 context 就失效了
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final monitor = ref.read(locationMonitorProvider);
     final repo = ref.read(locationRepositoryProvider);
-    final id = await repo.create(
-      title: title,
-      placeName: _place.text,
-      latitude: lat,
-      longitude: lon,
-      radiusMeters: _radius.round(),
-      triggerOn: _trigger,
-    );
+
+    int? id;
+    var createFailed = false;
+    try {
+      id = await repo.create(
+        title: title,
+        placeName: _place.text,
+        latitude: lat,
+        longitude: lon,
+        radiusMeters: _radius.round(),
+        triggerOn: _trigger,
+      );
+    } catch (e) {
+      debugPrint('[location] create failed: $e');
+      id = null;
+      createFailed = true;
+    }
+
+    if (!mounted) return;
     if (id == null) {
-      if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = '保存失败：检查一下坐标范围';
+        _error = createFailed ? '保存失败：写入数据库时出错，请再试一次' : '保存失败：检查一下坐标范围';
       });
       return;
     }
 
-    // 提醒要发通知 → 在这里做场景化权限申请
-    await AppNotifications.ensurePermission();
-    final watcher = ref.read(locationWatcherProvider);
-    await watcher.start();
-    // **不等**这一拍定位：保存是本地写库，不该被 GPS 拖住 10 秒。
-    // 触发结果会通过通知 / 全局 SnackBar 告诉用户。
-    unawaited(watcher.checkNow());
+    // 落库成功 = 保存成功。先把界面还回去，剩下的都是「增强能力」。
+    setState(() => _saving = false);
+    navigator.pop();
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            '已添加：${_place.text.trim().isEmpty ? title : _place.text.trim()}',
+          ),
+        ),
+      );
 
-    if (!mounted) return;
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已添加：${_place.text.trim().isEmpty ? title : _place.text.trim()}')),
-    );
+    unawaited(_warmUpBackground(monitor));
+  }
+
+  /// 通知权限 + 后台监测，**全部带超时且不上抛**。
+  ///
+  /// 顺序有讲究：先要通知权限（Android 13+ 会弹系统框，用户可能愣一会儿），
+  /// 再让 monitor 决定起前台服务还是退回前台轮询。
+  Future<void> _warmUpBackground(LocationMonitor monitor) async {
+    try {
+      await AppNotifications.ensurePermission().timeout(
+        const Duration(seconds: 15),
+      );
+    } catch (e) {
+      debugPrint('[location] notification permission skipped: $e');
+    }
+
+    try {
+      final nudge = await monitor.resumeByUserAction();
+      if (!nudge.ok) {
+        // 只是「后台监测没起来」，提醒本身已经存好了：页面顶部的状态条会说明
+        debugPrint('[location] background monitor not started: ${nudge.error}');
+      }
+    } catch (e) {
+      debugPrint('[location] background nudge failed: $e');
+    }
   }
 
   @override
@@ -251,8 +319,7 @@ class _LocationEditPageState extends ConsumerState<LocationEditPage> {
                     ),
                   ],
                   selected: {_trigger},
-                  onSelectionChanged: (v) =>
-                      setState(() => _trigger = v.first),
+                  onSelectionChanged: (v) => setState(() => _trigger = v.first),
                 ),
                 const SizedBox(height: AppDimens.cardGap),
                 Row(

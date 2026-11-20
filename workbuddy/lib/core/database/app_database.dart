@@ -49,8 +49,15 @@ class AppDatabase extends _$AppDatabase {
   /// 旧实现是 `deleteTable × 5 → createAll()`，等于「一次 schema 升级 = 用户数据全灭」。
   /// 现在每个版本差一步，只做 `CREATE TABLE IF NOT EXISTS` / `ALTER TABLE ADD COLUMN` /
   /// 数据搬运，任何一步都不会破坏既有行。
+  /// 当前 schema 版本（**唯一数字来源**）。
+  ///
+  /// 单独抽成静态常量，是因为「从备份恢复」需要在**不打开数据库**的前提下
+  /// 判断「备份是否来自更新版本」—— 那里只有文件头里的 user_version，
+  /// 拿不到实例上的 `schemaVersion`。
+  static const int currentSchemaVersion = 8;
+
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => currentSchemaVersion;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -123,7 +130,11 @@ class AppDatabase extends _$AppDatabase {
       final title = _pickString(data, const ['title', 'name'], '未命名任务');
       final type = _pickString(data, const ['type', 'category'], 'study');
       final createdAt =
-          _pickDateTime(data, const ['created_at', 'createdAt', 'start_date']) ??
+          _pickDateTime(data, const [
+            'created_at',
+            'createdAt',
+            'start_date',
+          ]) ??
           DateTime.now();
       final legacyId = _pickInt(data, const ['id']);
 
@@ -265,8 +276,40 @@ class AppDatabase extends _$AppDatabase {
 
   /// 数据库文件的默认位置（应用专属目录，卸载即清）。
   static Future<File> defaultFile() async {
+    final dir = await _documentsDir();
+    return File(p.join(dir, 'efficiency_app.sqlite'));
+  }
+
+  /// 应用私有「文档目录」。
+  ///
+  /// 为什么不直接 `await getApplicationDocumentsDirectory()`：
+  /// R5 冷启动打点显示这一步稳定吃 **400ms**（`boot.pathResolved +400ms`）。
+  /// 首个平台通道消息要排队等引擎/插件就绪，而它要的只是一个路径。
+  ///
+  /// Android 上这个路径可以**不经过任何插件**推出来：
+  /// `Directory.systemTemp` = `/data/user/0/<pkg>/cache`，
+  /// 它的父目录 + `/app_flutter` 正是 path_provider 的 Kotlin 实现
+  /// （`context.getDir("flutter", MODE_PRIVATE)`）返回的那个目录。
+  /// 实测这条路径与应用数据库的真实位置完全一致（换到错路径 = 读不到旧数据，
+  /// 一眼可见，见 R5 报告的证据）。
+  ///
+  /// 任何一步失败（非 Android、目录不可建）都退回 path_provider —— 这里只优化
+  /// 常见路径，不改变语义。
+  static Future<String> _documentsDir() async {
+    if (Platform.isAndroid) {
+      try {
+        final cache = Directory.systemTemp; // .../cache
+        final dir = Directory(p.join(cache.parent.path, 'app_flutter'));
+        if (!dir.existsSync()) {
+          await dir.create(recursive: true);
+        }
+        if (dir.existsSync()) return dir.path;
+      } catch (_) {
+        // 落到插件路径（与旧行为一致）
+      }
+    }
     final dir = await getApplicationDocumentsDirectory();
-    return File(p.join(dir.path, 'efficiency_app.sqlite'));
+    return dir.path;
   }
 
   /// 打开数据库：存放于应用专属目录，后台 isolate 执行避免阻塞 UI。
@@ -284,7 +327,9 @@ class AppDatabase extends _$AppDatabase {
   /// 文件被截断 / 头部被覆盖 / 根本不是 SQLite 时，这里会抛 `SqliteException`，
   /// 让调用方在 `runApp` 之前就知道「库打不开」，而不是把用户丢在白屏上。
   static Future<void> assertReadable(AppDatabase db) async {
-    await db.customSelect('SELECT count(*) AS c FROM sqlite_master').getSingle();
+    await db
+        .customSelect('SELECT count(*) AS c FROM sqlite_master')
+        .getSingle();
   }
 
   /// 把损坏的数据库文件**挪到旁边**（改名，不删除），返回新路径。

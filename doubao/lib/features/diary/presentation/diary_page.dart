@@ -14,12 +14,16 @@ class DiaryPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final diaries = ref.watch(diariesProvider);
-    return Scaffold(
+    return Semantics(
+      namesRoute: true,
+      label: '日记',
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('日记'),
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
+            tooltip: '搜索日记',
             onPressed: () => showSearch(
               context: context,
               delegate: _DiarySearchDelegate(),
@@ -43,7 +47,7 @@ class DiaryPage extends ConsumerWidget {
         },
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
-        icon: const Icon(Icons.edit),
+        icon: const ExcludeSemantics(child: Icon(Icons.edit)),
         label: const Text('写日记'),
       ),
       body: diaries.when(
@@ -66,9 +70,10 @@ class DiaryPage extends ConsumerWidget {
             itemBuilder: (ctx, i) {
               final d = rows[i];
               final date = DateTime.fromMillisecondsSinceEpoch(d.diaryDate);
-              return Card(
-                child: ListTile(
-                  leading: const Icon(Icons.article_outlined),
+              return MergeSemantics(
+                child: Card(
+                  child: ListTile(
+                  leading: const ExcludeSemantics(child: Icon(Icons.article_outlined)),
                   title: Text(d.title.isEmpty
                       ? '${date.year}-${date.month}-${date.day}'
                       : d.title),
@@ -108,11 +113,13 @@ class DiaryPage extends ConsumerWidget {
                       await ref.read(diaryRepositoryProvider).softDelete(d.id);
                     }
                   },
+                  ),
                 ),
               );
             },
           );
         },
+      ),
       ),
     );
   }
@@ -193,12 +200,17 @@ class _PreviewWithEditButton extends StatelessWidget {
 class _DiarySearchDelegate extends SearchDelegate<String> {
   @override
   List<Widget> buildActions(BuildContext context) => [
-        IconButton(icon: const Icon(Icons.clear), onPressed: () => query = ''),
+        IconButton(
+          icon: const Icon(Icons.clear),
+          tooltip: '清空搜索',
+          onPressed: () => query = '',
+        ),
       ];
 
   @override
   Widget buildLeading(BuildContext context) => IconButton(
         icon: const Icon(Icons.arrow_back),
+        tooltip: '返回',
         onPressed: () => close(context, ''),
       );
 

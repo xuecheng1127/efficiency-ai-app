@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/constants/app_dimens.dart';
 import '../core/database/app_boot.dart';
+import '../core/diagnostics/startup_trace.dart';
 import '../core/database/app_database.dart';
 import '../core/database/database_provider.dart';
 import '../core/settings/app_settings.dart';
@@ -55,11 +56,18 @@ class _BootstrapAppState extends State<BootstrapApp> {
     });
     try {
       final result = await (widget.boot ?? bootApp)();
+      StartupTrace.mark('boot.resultReady');
       if (!mounted) return;
       setState(() {
         _result = result;
         _loading = false;
       });
+      // R5：真正「可用」的时刻 —— 主界面第一帧提交给合成器之后。
+      // `am start -W` 的 TotalTime 只等到「转圈那一帧」，数据量大时
+      // 完全反映不出用户实际等待了多久（实测 1.0s vs 真实 3.7s）。
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => StartupTrace.markOnce('ui.shellFirstFrame'),
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -104,9 +112,9 @@ class _BootstrapAppState extends State<BootstrapApp> {
     } catch (e) {
       if (!mounted || !hostContext.mounted) return;
       setState(() => _loading = false);
-      ScaffoldMessenger.of(hostContext).showSnackBar(
-        SnackBar(content: Text('备份失败，未做任何改动：$e')),
-      );
+      ScaffoldMessenger.of(
+        hostContext,
+      ).showSnackBar(SnackBar(content: Text('备份失败，未做任何改动：$e')));
       return;
     }
     if (!mounted) return;
@@ -117,11 +125,15 @@ class _BootstrapAppState extends State<BootstrapApp> {
   Widget build(BuildContext context) {
     final result = _result;
     if (result != null) {
+      StartupTrace.markOnce('ui.providerScopeBuilt');
       return ProviderScope(
         // 重建后库对象是新的：换一个 key，避免沿用上一轮的 provider 缓存。
         key: ObjectKey(result.db),
         overrides: [
-          databaseProvider.overrideWithValue(result.db),
+          // databaseProvider 是 NotifierProvider（恢复时要能整体换库），
+          // 因此这里用 overrideWith 注入一个**带种子**的 Notifier，
+          // 而不是 overrideWithValue。
+          databaseProvider.overrideWith(() => DatabaseNotifier(result.db)),
           settingsStoreProvider.overrideWithValue(result.settings),
         ],
         child: const App(),

@@ -17,7 +17,10 @@ class WorkbenchPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final mode = ref.watch(workbenchModeProvider);
 
-    return Scaffold(
+    return Semantics(
+      namesRoute: true,
+      label: '工作台',
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('工作台'),
         actions: [
@@ -42,6 +45,7 @@ class WorkbenchPage extends ConsumerWidget {
                   const _DiaryCard(),
               ],
             ),
+      ),
     );
   }
 
@@ -105,8 +109,10 @@ class _UnconfiguredView extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.space_dashboard_outlined,
-                size: 64, color: Colors.grey.shade400),
+            ExcludeSemantics(
+              child: Icon(Icons.space_dashboard_outlined,
+                  size: 64, color: Colors.grey.shade400),
+            ),
             const SizedBox(height: 16),
             const Text('工作台还没配置',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
@@ -117,7 +123,7 @@ class _UnconfiguredView extends ConsumerWidget {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                icon: const Icon(Icons.check_circle_outline),
+                icon: const ExcludeSemantics(child: Icon(Icons.check_circle_outline)),
                 label: const Text('只看任务'),
                 onPressed: () => ref
                     .read(workbenchModeProvider.notifier)
@@ -128,7 +134,7 @@ class _UnconfiguredView extends ConsumerWidget {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                icon: const Icon(Icons.book_outlined),
+                icon: const ExcludeSemantics(child: Icon(Icons.book_outlined)),
                 label: const Text('只看日记'),
                 onPressed: () => ref
                     .read(workbenchModeProvider.notifier)
@@ -139,7 +145,7 @@ class _UnconfiguredView extends ConsumerWidget {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                icon: const Icon(Icons.dashboard_outlined),
+                icon: const ExcludeSemantics(child: Icon(Icons.dashboard_outlined)),
                 label: const Text('任务 + 日记'),
                 onPressed: () => ref
                     .read(workbenchModeProvider.notifier)

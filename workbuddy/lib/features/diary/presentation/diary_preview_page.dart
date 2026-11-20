@@ -149,7 +149,14 @@ class _DiaryPreviewPageState extends ConsumerState<DiaryPreviewPage> {
     return LayoutBuilder(
       builder: (context, constraints) {
         const left = AppDimens.pagePadding;
-        final fontSize = entry.fontSize;
+        // 系统字号（R1 任务 3）：排版引擎内部一律 TextScaler.noScaling，
+        // 否则「度量」和「绘制」会用两套标尺，行宽算不准。这里改的是
+        // **基准字号**：按系统缩放系数放大 entry.fontSize，再交给引擎同时用于
+        // 度量与绘制，于是缩放在 1.3 下生效且断行依旧准确。
+        final scale = MediaQuery.textScalerOf(
+          context,
+        ).scale(1.0).clamp(0.8, 1.3);
+        final fontSize = entry.fontSize * scale;
         final lineHeight = fontSize * AppDimens.lineHeightRatio;
         final baseStyle = TextStyle(fontFamily: entry.fontFamily);
         final textStyle = baseStyle.copyWith(

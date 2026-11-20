@@ -55,7 +55,8 @@ class TaskCard extends ConsumerWidget {
     final textColor =
         isDark ? AppColors.textDark : AppColors.textLight;
 
-    return Container(
+    return MergeSemantics(
+      child: Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(AppColors.cardRadius),
@@ -84,11 +85,17 @@ class TaskCard extends ConsumerWidget {
               SizedBox(
                 width: 44,
                 height: 44,
-                child: IconButton(
-                  onPressed: occ.status == TaskStatus.done ? onReopen : onComplete,
-                  icon: Icon(icon, color: color, size: 26),
-                  padding: EdgeInsets.zero,
-                  tooltip: occ.status == TaskStatus.done ? '撤销完成' : '完成',
+                child: Semantics(
+                  label: occ.status == TaskStatus.done
+                      ? '撤销「${occ.titleSnapshot}」的完成'
+                      : '标记「${occ.titleSnapshot}」为已完成',
+                  button: true,
+                  child: IconButton(
+                    onPressed: occ.status == TaskStatus.done ? onReopen : onComplete,
+                    icon: ExcludeSemantics(child: Icon(icon, color: color, size: 26)),
+                    padding: EdgeInsets.zero,
+                    tooltip: occ.status == TaskStatus.done ? '撤销完成' : '完成',
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -153,24 +160,27 @@ class TaskCard extends ConsumerWidget {
                   ],
                 ),
               ),
-              // 右侧：进行中动画标识
+              // 右侧：进行中动画标识（纯装饰，不进入读屏）
               if (occ.status == TaskStatus.inProgress)
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: AppColors.primary,
-                    shape: BoxShape.circle,
-                  ),
-                )
-                    .animate(onPlay: (c) => c.repeat())
-                    .fadeIn(duration: 600.ms, curve: Curves.easeInOut)
-                    .then()
-                    .fadeOut(duration: 600.ms, curve: Curves.easeInOut),
+                ExcludeSemantics(
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: AppColors.primary,
+                      shape: BoxShape.circle,
+                    ),
+                  )
+                      .animate(onPlay: (c) => c.repeat())
+                      .fadeIn(duration: 600.ms, curve: Curves.easeInOut)
+                      .then()
+                      .fadeOut(duration: 600.ms, curve: Curves.easeInOut),
+                ),
             ],
           ),
         ),
       ),
+    ),
     );
   }
 }

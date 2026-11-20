@@ -28,7 +28,9 @@ class StreakPage extends ConsumerWidget {
     final longest = summary.longestDays > cached ? summary.longestDays : cached;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('火花与勋章')),
+      appBar: AppBar(
+        title: Semantics(namesRoute: true, child: const Text('火花与勋章')),
+      ),
       body: ListView(
         padding: const EdgeInsets.only(bottom: AppDimens.sectionGap),
         children: [

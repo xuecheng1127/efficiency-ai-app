@@ -6,9 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/app.dart';
 import 'core/services/task_timer_service.dart';
-import 'features/toolbox/data/location_background_worker.dart';
 
-/// 效率助手 V1.2 应用入口（T01：数据层已切换为 Drift）
+/// 效率助手 应用入口（T01：数据层已切换为 Drift）
 ///
 /// 技术栈约束（需求文档）：
 /// - Flutter 3.x + Dart 3.x，全原生组件渲染（无 WebView 套壳）；
@@ -17,10 +16,12 @@ import 'features/toolbox/data/location_background_worker.dart';
 ///   freezed + json_serializable 状态/实体类；
 /// - 最低兼容安卓 10（API 29）。
 ///
-/// 计时器前台服务（V1.1）：
+/// 前台服务（flutter_foreground_task）：
 /// - initCommunicationPort：TaskHandler 后台 isolate 与主 isolate 的通信端口，
 ///   必须在 runApp 之前调用；
-/// - TaskTimerService.init：配置前台服务通知渠道/心跳，异步初始化不阻塞启动。
+/// - TaskTimerService.init：计时器服务配置（V1.1）；
+/// - LocationReminderFgService：途径提醒后台监测（R4）——存在启用中的提醒
+///   即拉起 location 型前台服务，启停由列表页 sync() 维护。
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -28,8 +29,6 @@ void main() {
   FlutterForegroundTask.initCommunicationPort();
   // 异步初始化前台服务配置（通知渠道、心跳间隔等）
   unawaited(TaskTimerService.instance.init());
-  // WorkManager 后台位置检查
-  unawaited(LocationBgWorker.init());
 
   runApp(const ProviderScope(child: EfficiencyApp()));
 }

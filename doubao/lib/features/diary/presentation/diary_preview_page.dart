@@ -57,7 +57,13 @@ class _PreviewBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lineHeight = fontSize * 1.5;
-    final style = TextStyle(fontSize: fontSize, height: 1.0);
+    // 显式给正文颜色：CustomPaint 里的 TextPainter 不继承 DefaultTextStyle，
+    // 缺省色在浅色纸面上对比度极低，读不出来
+    final style = TextStyle(
+      fontSize: fontSize,
+      height: 1.0,
+      color: Theme.of(context).colorScheme.onSurface,
+    );
 
     // 度量一个 CJK 字符宽度
     final measureTp = TextPainter(
@@ -66,13 +72,8 @@ class _PreviewBody extends StatelessWidget {
     )..layout();
     final charW = measureTp.width;
 
-    // 临时：短内容用测试文本
-    final effectiveContent = content.length < 20
-        ? '今天下午去了图书馆，借了三本书：《数据结构》《算法导论》《操作系统概念》。回来的路上顺便买了点水果：苹果、香蕉、橘子，还有酸奶。晚上打算先看第一章（大概五十页），如果时间够的话再看第二章。明天早上要去跑步（六点半），希望能坚持下来。'
-        : content;
-
     // 按 \n 分段，每段用 CjkLayout 断行
-    final paragraphs = effectiveContent.split('\n');
+    final paragraphs = content.split('\n');
     final allLines = <String>[];
     for (final p in paragraphs) {
       if (p.isEmpty) {

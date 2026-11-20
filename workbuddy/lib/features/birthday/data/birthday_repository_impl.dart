@@ -30,8 +30,7 @@ class BirthdayRepositoryImpl implements BirthdayRepository {
 
   @override
   Stream<List<Birthday>> watchAll() {
-    final query = _alive()
-      ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]);
+    final query = _alive()..orderBy([(t) => OrderingTerm.asc(t.createdAt)]);
     return query.watch().map((rows) => [for (final r in rows) _toDomain(r)]);
   }
 
@@ -62,19 +61,21 @@ class BirthdayRepositoryImpl implements BirthdayRepository {
   }) async {
     final n = name.trim();
     if (n.isEmpty) return null;
-    return _db.into(_db.birthdays).insert(
-      db.BirthdaysCompanion.insert(
-        name: n,
-        birthdayMonth: month,
-        birthdayDay: day,
-        calendarType: Value(calendar.id),
-        birthdayYear: Value(year),
-        groupTag: Value(_emptyToNull(groupTag)),
-        advanceDays: Value(advanceDays < 0 ? 0 : advanceDays),
-        notes: Value(_emptyToNull(notes)),
-        createdAt: DateTime.now(),
-      ),
-    );
+    return _db
+        .into(_db.birthdays)
+        .insert(
+          db.BirthdaysCompanion.insert(
+            name: n,
+            birthdayMonth: month,
+            birthdayDay: day,
+            calendarType: Value(calendar.id),
+            birthdayYear: Value(year),
+            groupTag: Value(_emptyToNull(groupTag)),
+            advanceDays: Value(advanceDays < 0 ? 0 : advanceDays),
+            notes: Value(_emptyToNull(notes)),
+            createdAt: DateTime.now(),
+          ),
+        );
   }
 
   @override
@@ -98,9 +99,7 @@ class BirthdayRepositoryImpl implements BirthdayRepository {
         birthdayMonth: Value.absentIfNull(month),
         birthdayDay: Value.absentIfNull(day),
         calendarType: Value.absentIfNull(calendar?.id),
-        birthdayYear: clearYear
-            ? const Value(null)
-            : Value.absentIfNull(year),
+        birthdayYear: clearYear ? const Value(null) : Value.absentIfNull(year),
         groupTag: clearGroupTag
             ? const Value(null)
             : Value.absentIfNull(_emptyToNull(groupTag)),

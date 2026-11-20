@@ -32,6 +32,8 @@ class AppSettings {
     this.calorieWeightKg = 65,
     this.calorieActivity = 1.375,
     this.longestStreak = 0,
+    this.autoBackupEnabled = true,
+    this.lastAutoBackupAt,
   });
 
   /// 内置铃音（原生侧 `AlarmService` 按名字匹配同名前缀的资源）。
@@ -85,6 +87,17 @@ class AppSettings {
   /// 展示时取 `max(现算值, 缓存值)`。
   final int longestStreak;
 
+  /// 自动备份开关（默认开启）。键名与任务书一致：`auto_backup_enabled`。
+  ///
+  /// 为什么放在这里而不是 SharedPreferences：设置文件是纯 dart:io 的 JSON，
+  /// 依赖（见文件头），而设置文件已经是**唯一**的用户偏好入口，且会被一起打进
+  /// 备份包 —— 恢复备份后「上次备份时间」跟着回来，不会立刻又触发一次自动备份。
+  final bool autoBackupEnabled;
+
+  /// 上次自动备份时间（毫秒时间戳）。null = 从未备份过。
+  /// 键名：`last_auto_backup_at`。
+  final int? lastAutoBackupAt;
+
   AppSettings copyWith({
     bool? remindersEnabled,
     bool? snoozeEnabled,
@@ -101,6 +114,8 @@ class AppSettings {
     int? calorieWeightKg,
     double? calorieActivity,
     int? longestStreak,
+    bool? autoBackupEnabled,
+    int? lastAutoBackupAt,
   }) {
     return AppSettings(
       remindersEnabled: remindersEnabled ?? this.remindersEnabled,
@@ -118,6 +133,8 @@ class AppSettings {
       calorieWeightKg: calorieWeightKg ?? this.calorieWeightKg,
       calorieActivity: calorieActivity ?? this.calorieActivity,
       longestStreak: longestStreak ?? this.longestStreak,
+      autoBackupEnabled: autoBackupEnabled ?? this.autoBackupEnabled,
+      lastAutoBackupAt: lastAutoBackupAt ?? this.lastAutoBackupAt,
     );
   }
 
@@ -137,6 +154,8 @@ class AppSettings {
     'calorieWeightKg': calorieWeightKg,
     'calorieActivity': calorieActivity,
     'longestStreak': longestStreak,
+    'auto_backup_enabled': autoBackupEnabled,
+    'last_auto_backup_at': lastAutoBackupAt,
   };
 
   /// 容错解析：**任何**字段坏掉都退回默认值，绝不让设置文件把应用启动搞崩。
@@ -170,7 +189,19 @@ class AppSettings {
         json['longestStreak'],
         fallback.longestStreak,
       ),
+      autoBackupEnabled: json['auto_backup_enabled'] is bool
+          ? json['auto_backup_enabled'] as bool
+          : fallback.autoBackupEnabled,
+      // 时间戳只收正数：0 / 负数 / 字符串都当「从未备份」，否则会算出
+      // 「上次备份是 1970 年」这种荒唐提示。
+      lastAutoBackupAt: _parseTimestamp(json['last_auto_backup_at']),
     );
+  }
+
+  /// 毫秒时间戳：只认 > 0 的 int（JSON 里的 `1.7e12` 之类一律丢弃）。
+  static int? _parseTimestamp(Object? raw) {
+    if (raw is int && raw > 0) return raw;
+    return null;
   }
 
   static double _parseDouble(Object? raw, double fallback) {
@@ -285,6 +316,8 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     int? calorieWeightKg,
     double? calorieActivity,
     int? longestStreak,
+    bool? autoBackupEnabled,
+    int? lastAutoBackupAt,
   }) {
     return update(
       state.copyWith(
@@ -303,6 +336,8 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
         calorieWeightKg: calorieWeightKg,
         calorieActivity: calorieActivity,
         longestStreak: longestStreak,
+        autoBackupEnabled: autoBackupEnabled,
+        lastAutoBackupAt: lastAutoBackupAt,
       ),
     );
   }

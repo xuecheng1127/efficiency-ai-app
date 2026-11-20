@@ -92,20 +92,25 @@ class BirthdayListPage extends ConsumerWidget {
                 : '按距离远近排序，7 天内会高亮',
           ),
           for (final occ in upcoming)
-            _BirthdayCard(
-              occ: occ,
-              onTap: () => _openEditor(context, existing: occ.birthday),
-              onDelete: () => _delete(context, ref, occ),
+            // R3：一张生日卡（日期 / 称呼 / 还有几天）合并成一个焦点
+            MergeSemantics(
+              child: _BirthdayCard(
+                occ: occ,
+                onTap: () => _openEditor(context, existing: occ.birthday),
+                onDelete: () => _delete(context, ref, occ),
+              ),
             ),
         ],
       );
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('朋友生日')),
+      appBar: AppBar(
+        title: Semantics(namesRoute: true, child: const Text('朋友生日')),
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openEditor(context),
-        icon: const Icon(Icons.add),
+        icon: const ExcludeSemantics(child: Icon(Icons.add)),
         label: const Text('添加生日'),
       ),
       body: body,
@@ -156,8 +161,9 @@ class _BirthdayCard extends StatelessWidget {
                     height: 44,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: (soon ? AppColors.success : theme.colorScheme.primary)
-                          .withValues(alpha: 0.12),
+                      color:
+                          (soon ? AppColors.success : theme.colorScheme.primary)
+                              .withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(AppDimens.cardRadius),
                     ),
                     child: Text(

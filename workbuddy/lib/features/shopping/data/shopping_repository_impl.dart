@@ -22,8 +22,7 @@ class ShoppingRepositoryImpl implements ShoppingRepository {
   );
 
   SimpleSelectStatement<db.$ShoppingItemsTable, db.ShoppingItem> _alive() {
-    return _db.select(_db.shoppingItems)
-      ..where((t) => t.deletedAt.isNull());
+    return _db.select(_db.shoppingItems)..where((t) => t.deletedAt.isNull());
   }
 
   @override
@@ -35,9 +34,7 @@ class ShoppingRepositoryImpl implements ShoppingRepository {
         (t) => OrderingTerm.desc(t.createdAt),
         (t) => OrderingTerm.desc(t.id),
       ]);
-    return query.watch().map(
-      (rows) => [for (final r in rows) _toDomain(r)],
-    );
+    return query.watch().map((rows) => [for (final r in rows) _toDomain(r)]);
   }
 
   @override
@@ -49,14 +46,16 @@ class ShoppingRepositoryImpl implements ShoppingRepository {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return null;
     final c = category?.trim();
-    return _db.into(_db.shoppingItems).insert(
-      db.ShoppingItemsCompanion.insert(
-        name: trimmed,
-        quantity: Value(quantity < 1 ? 1 : quantity),
-        category: Value(c == null || c.isEmpty ? null : c),
-        createdAt: DateTime.now(),
-      ),
-    );
+    return _db
+        .into(_db.shoppingItems)
+        .insert(
+          db.ShoppingItemsCompanion.insert(
+            name: trimmed,
+            quantity: Value(quantity < 1 ? 1 : quantity),
+            category: Value(c == null || c.isEmpty ? null : c),
+            createdAt: DateTime.now(),
+          ),
+        );
   }
 
   @override
@@ -98,26 +97,27 @@ class ShoppingRepositoryImpl implements ShoppingRepository {
   /// 只改 `checked` 与 `checkedAt`，**不动 createdAt** —— 恢复后清单顺序不会乱。
   @override
   Future<int> resetChecked() {
-    return (_db.update(_db.shoppingItems)
-          ..where((t) => t.deletedAt.isNull() & t.checked.equals(true)))
-        .write(
-          const db.ShoppingItemsCompanion(
-            checked: Value(false),
-            checkedAt: Value(null),
-          ),
-        );
+    return (_db.update(
+      _db.shoppingItems,
+    )..where((t) => t.deletedAt.isNull() & t.checked.equals(true))).write(
+      const db.ShoppingItemsCompanion(
+        checked: Value(false),
+        checkedAt: Value(null),
+      ),
+    );
   }
 
   @override
   Future<List<String>> knownCategories() async {
-    final rows = await (_db.selectOnly(_db.shoppingItems)
-          ..addColumns([_db.shoppingItems.category])
-          ..where(
-            _db.shoppingItems.deletedAt.isNull() &
-                _db.shoppingItems.category.isNotNull(),
-          )
-          ..groupBy([_db.shoppingItems.category]))
-        .get();
+    final rows =
+        await (_db.selectOnly(_db.shoppingItems)
+              ..addColumns([_db.shoppingItems.category])
+              ..where(
+                _db.shoppingItems.deletedAt.isNull() &
+                    _db.shoppingItems.category.isNotNull(),
+              )
+              ..groupBy([_db.shoppingItems.category]))
+            .get();
     final out = <String>[];
     for (final r in rows) {
       final v = r.read(_db.shoppingItems.category)?.trim();

@@ -7,4 +7,7 @@
     <string name="alarm_snooze">贪睡</string>
     <string name="alarm_dismiss">关闭</string>
     <string name="alarm_dismiss_hint">息屏或点「关闭」结束响铃</string>
+    <!-- 桌面小组件（R2） -->
+    <string name="widget_title">今日任务</string>
+    <string name="widget_description">显示今天已完成 / 总数与前 3 条未完成任务，点击打开应用</string>
 </resources>

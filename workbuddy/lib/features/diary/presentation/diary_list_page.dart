@@ -80,7 +80,7 @@ class _DiaryListPageState extends ConsumerState<DiaryListPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('日记'),
+        title: Semantics(namesRoute: true, child: const Text('日记')),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(58),
           child: Padding(
@@ -120,7 +120,7 @@ class _DiaryListPageState extends ConsumerState<DiaryListPage> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openEditor(),
-        icon: const Icon(Icons.edit_outlined),
+        icon: const ExcludeSemantics(child: Icon(Icons.edit_outlined)),
         label: const Text('写日记'),
       ),
       body: asyncRows.when(
@@ -161,35 +161,56 @@ class _DiaryListPageState extends ConsumerState<DiaryListPage> {
             DiaryDateBucket.earlier,
           ];
 
-          return ListView(
+          // R5：把「分组标题 + 卡片」拍平成一个索引数组，交给
+          // [ListView.builder] 惰性构建。
+          //
+          // 旧写法是 `ListView(children: [...])`：500 篇日记会在打开这一页的
+          // 那一帧里同步构建 500 个卡片（每个卡片又含 4 个文本节点 + 2 层
+          // Material），首帧直接卡死。builder 只构建可见的十来张，滚到哪算到哪。
+          // 索引里隔一个存「桶标记」，渲染时按类型分支，不额外引入模型类。
+          final items = <Object>[];
+          for (final bucket in order) {
+            final group = groups[bucket];
+            if (group == null || group.isEmpty) continue;
+            items.add(bucket);
+            items.addAll(group);
+          }
+
+          return ListView.builder(
             padding: const EdgeInsets.fromLTRB(
               AppDimens.pagePadding,
               8,
               AppDimens.pagePadding,
               96,
             ),
-            children: [
-              for (final bucket in order)
-                if (groups[bucket] != null) ...[
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
-                    child: Text(
-                      DiaryListRow.bucketLabel(bucket),
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
+            itemCount: items.length,
+            itemBuilder: (context, index) {
+              final item = items[index];
+              if (item is DiaryDateBucket) {
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+                  child: Text(
+                    DiaryListRow.bucketLabel(item),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  for (final row in groups[bucket]!)
-                    _DiaryCard(
-                      row: row,
-                      keyword: keyword,
-                      onTap: () => _openPreview(row.entry),
-                      onLongPress: () => _confirmDelete(row.entry),
-                    ),
-                ],
-            ],
+                );
+              }
+              final row = item as DiaryListRow;
+              // R3：日记卡有「日期 / 模板 / 标题 / 摘要」四个文本节点，
+              // 不合并读屏要停 4 次才念完一篇。合并后一句到底，长按删除照旧。
+              return MergeSemantics(
+                key: ValueKey<int>(row.entry.id),
+                child: _DiaryCard(
+                  row: row,
+                  keyword: keyword,
+                  onTap: () => _openPreview(row.entry),
+                  onLongPress: () => _confirmDelete(row.entry),
+                ),
+              );
+            },
           );
         },
       ),

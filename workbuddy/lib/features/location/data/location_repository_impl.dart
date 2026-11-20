@@ -28,19 +28,18 @@ class LocationRepositoryImpl implements LocationRepository {
   Stream<List<LocationReminder>> watchAll() {
     final query = _db.select(_db.locationReminders)
       ..where((t) => t.deletedAt.isNull())
-      ..orderBy([(t) => OrderingTerm.desc(t.enabled), (t) => OrderingTerm.desc(t.id)]);
-    return query.watch().map(
-      (rows) => [for (final r in rows) _toDomain(r)],
-    );
+      ..orderBy([
+        (t) => OrderingTerm.desc(t.enabled),
+        (t) => OrderingTerm.desc(t.id),
+      ]);
+    return query.watch().map((rows) => [for (final r in rows) _toDomain(r)]);
   }
 
   @override
   Future<List<LocationReminder>> allEnabled() async {
-    final rows =
-        await (_db.select(_db.locationReminders)..where(
-              (t) => t.deletedAt.isNull() & t.enabled.equals(true),
-            ))
-            .get();
+    final rows = await (_db.select(
+      _db.locationReminders,
+    )..where((t) => t.deletedAt.isNull() & t.enabled.equals(true))).get();
     return [for (final r in rows) _toDomain(r)];
   }
 
@@ -56,21 +55,26 @@ class LocationRepositoryImpl implements LocationRepository {
   }) async {
     final t = title.trim();
     if (t.isEmpty) return null;
-    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    if (latitude < -90 ||
+        latitude > 90 ||
+        longitude < -180 ||
+        longitude > 180) {
       return null;
     }
-    return _db.into(_db.locationReminders).insert(
-      db.LocationRemindersCompanion.insert(
-        title: t,
-        placeName: placeName.trim(),
-        latitude: latitude,
-        longitude: longitude,
-        radiusMeters: Value(radiusMeters < 50 ? 50 : radiusMeters),
-        triggerOn: Value(triggerOn.id),
-        enabled: Value(enabled),
-        createdAt: DateTime.now(),
-      ),
-    );
+    return _db
+        .into(_db.locationReminders)
+        .insert(
+          db.LocationRemindersCompanion.insert(
+            title: t,
+            placeName: placeName.trim(),
+            latitude: latitude,
+            longitude: longitude,
+            radiusMeters: Value(radiusMeters < 50 ? 50 : radiusMeters),
+            triggerOn: Value(triggerOn.id),
+            enabled: Value(enabled),
+            createdAt: DateTime.now(),
+          ),
+        );
   }
 
   @override

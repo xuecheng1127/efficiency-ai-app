@@ -44,6 +44,12 @@ class _RecordingRepo implements TaskRepository {
   Future<void> startTimer(int instanceId) async {}
 
   @override
+  Future<void> pauseTimer(int instanceId) async {}
+
+  @override
+  Future<void> resumeTimer(int instanceId) async {}
+
+  @override
   Future<void> cancelTimer(int instanceId) async {}
 
   @override

@@ -119,8 +119,8 @@ class MealGroup {
 List<MealGroup> groupByMeal(List<CalorieEntry> entries) {
   final alive = entries.where((e) => e.deletedAt == null).toList();
   final out = <MealGroup>[];
-  for (final meal in MealType.values.toList()
-    ..sort((a, b) => a.order.compareTo(b.order))) {
+  for (final meal
+      in MealType.values.toList()..sort((a, b) => a.order.compareTo(b.order))) {
     final list = alive.where((e) => e.meal == meal).toList()
       ..sort((a, b) {
         final c = a.createdAt.compareTo(b.createdAt);
@@ -136,7 +136,11 @@ enum CalorieSex {
   male(id: 'male', label: '男', adjust: 5),
   female(id: 'female', label: '女', adjust: -161);
 
-  const CalorieSex({required this.id, required this.label, required this.adjust});
+  const CalorieSex({
+    required this.id,
+    required this.label,
+    required this.adjust,
+  });
 
   final String id;
   final String label;

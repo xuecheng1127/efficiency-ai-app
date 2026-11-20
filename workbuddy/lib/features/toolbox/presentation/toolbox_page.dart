@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimens.dart';
+import '../../../core/diagnostics/startup_trace.dart';
 import '../../../core/widgets/ui_kit.dart';
 import '../../birthday/presentation/birthday_list_page.dart';
 import '../../calorie/presentation/calorie_page.dart';
 import '../../location/presentation/location_list_page.dart';
 import '../../memo/presentation/memo_list_page.dart';
+import '../../search/presentation/search_page.dart';
 import '../../shopping/presentation/shopping_list_page.dart';
 
 /// 扩展工具箱：可选插件体系。
@@ -42,9 +44,13 @@ class ToolboxPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    StartupTrace.markOnce('ui.tab.toolbox.build');
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('工具箱')),
+      appBar: AppBar(
+        title: Semantics(namesRoute: true, child: const Text('工具箱')),
+        actions: const [SearchAction()],
+      ),
       body: ListView(
         padding: const EdgeInsets.only(
           top: AppDimens.sectionHeaderGap,
@@ -57,9 +63,12 @@ class ToolboxPage extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  Icons.verified_user_outlined,
-                  color: theme.colorScheme.primary,
+                // 装饰性图标（同一句话已经说清楚了）
+                ExcludeSemantics(
+                  child: Icon(
+                    Icons.verified_user_outlined,
+                    color: theme.colorScheme.primary,
+                  ),
                 ),
                 const SizedBox(width: AppDimens.cardGap),
                 Expanded(
@@ -164,97 +173,110 @@ class _PluginCard extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(AppDimens.cardRadius),
-          child: Padding(
-            padding: const EdgeInsets.all(AppDimens.pagePadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withValues(
-                          alpha: 0.12,
-                        ),
-                        borderRadius: BorderRadius.circular(9),
-                      ),
-                      child: Icon(
-                        plugin.icon,
-                        size: 18,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(width: AppDimens.cardGap),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                plugin.name,
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(width: AppDimens.sectionHeaderGap),
-                              if (plugin.available)
-                                const _StatusChip.available()
-                              else
-                                const _StatusChip.comingSoon(),
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            plugin.description,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
+          // R3：一张卡是**一条**信息（名称 + 可用状态 + 说明），
+          // 不合并的话读屏要停 5 次才把这一句读完，中间还夹着装饰图标。
+          child: MergeSemantics(
+            child: Padding(
+              padding: const EdgeInsets.all(AppDimens.pagePadding),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      // 装饰性图标（名称已经在右边用文字说了）
+                      ExcludeSemantics(
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withValues(
+                              alpha: 0.12,
                             ),
+                            borderRadius: BorderRadius.circular(9),
                           ),
-                        ],
+                          child: Icon(
+                            plugin.icon,
+                            size: 18,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
                       ),
-                    ),
-                    // chevron 只在「真的能进去」时才画 —— 不给假的导航暗示
-                    if (plugin.available)
-                      Icon(
-                        Icons.chevron_right,
-                        size: 20,
-                        color: theme.colorScheme.onSurfaceVariant,
+                      const SizedBox(width: AppDimens.cardGap),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  plugin.name,
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(
+                                  width: AppDimens.sectionHeaderGap,
+                                ),
+                                if (plugin.available)
+                                  const _StatusChip.available()
+                                else
+                                  const _StatusChip.comingSoon(),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              plugin.description,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                  ],
-                ),
-                const SizedBox(height: AppDimens.cardGap),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      plugin.available
-                          ? Icons.check_circle_outline
-                          : Icons.info_outline,
-                      size: 16,
-                      color: plugin.available
-                          ? AppColors.success
-                          : AppColors.warning,
-                    ),
-                    const SizedBox(width: AppDimens.sectionHeaderGap / 2),
-                    Expanded(
-                      child: Text(
-                        plugin.available
-                            ? '已可用 · 点击进入，数据只存在本机'
-                            : '开发中 · V1 后续接入，届时可一键添加到主页；现在点击只会提示',
-                        style: theme.textTheme.bodySmall?.copyWith(
+                      // chevron 只在「真的能进去」时才画 —— 不给假的导航暗示
+                      if (plugin.available)
+                        ExcludeSemantics(
+                          child: Icon(
+                            Icons.chevron_right,
+                            size: 20,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: AppDimens.cardGap),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ExcludeSemantics(
+                        child: Icon(
+                          plugin.available
+                              ? Icons.check_circle_outline
+                              : Icons.info_outline,
+                          size: 16,
                           color: plugin.available
                               ? AppColors.success
                               : AppColors.warning,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                      const SizedBox(width: AppDimens.sectionHeaderGap / 2),
+                      Expanded(
+                        child: Text(
+                          plugin.available
+                              ? '已可用 · 点击进入，数据只存在本机'
+                              : '开发中 · V1 后续接入，届时可一键添加到主页；现在点击只会提示',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: plugin.available
+                                ? AppColors.success
+                                : AppColors.warning,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -274,8 +296,14 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Chip(
-      label: Text(_label, style: TextStyle(fontSize: 11, color: _color)),
+      // 字号走主题（labelSmall），不写死 11：写死的字号在系统字号放大时
+      // 会和旁边的插件名脱节，看起来像两个不同层级的元素。
+      label: Text(
+        _label,
+        style: theme.textTheme.labelSmall?.copyWith(color: _color),
+      ),
       visualDensity: VisualDensity.compact,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       side: BorderSide(color: _color.withValues(alpha: 0.4)),

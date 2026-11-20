@@ -4,10 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/database/app_database.dart';
 import '../data/loc_notification_service.dart';
-import '../data/location_fg_service.dart';
-import '../data/location_foreground_service.dart';
-import '../data/location_reminder_monitor.dart';
-import '../data/location_reminder_repository.dart';
+import '../data/location_reminder_fg_service.dart';
 import '../providers/location_reminder_providers.dart';
 import 'location_reminder_add_page.dart';
 
@@ -19,60 +16,28 @@ class LocationReminderListPage extends ConsumerStatefulWidget {
 }
 
 class _ListPageState extends ConsumerState<LocationReminderListPage> {
-  LocationReminderMonitor? _monitor;
-
   @override
   void initState() {
     super.initState();
     LocNotificationService().init();
-    _monitor = LocationReminderMonitor(ref.read(locationReminderRepoProvider));
-    _monitor!.onTrigger = (r, d) {
-      LocNotificationService().show(
-        id: r.id,
-        title: '途径提醒',
-        body: '你正在【${r.placeName}】附近 —— ${r.title}',
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('📍 途径提醒 · 你正在【${r.placeName}】附近 —— ${r.title}')),
-      );
-    };
-    _monitor!.start();
-  }
-
-  @override
-  void dispose() {
-    _monitor?.stop();
-    super.dispose();
+    // 页面打开时同步一次服务状态（App 启动后首次进入即恢复监测）。
+    // 位置检查统一由 LocationReminderFgService 的后台 TaskHandler 负责
+    // （60s 轮询 + 进入/离开状态机），页面本身不再起轮询。
+    LocationReminderFgService.sync();
   }
 
   @override
   Widget build(BuildContext context) {
     final items = ref.watch(locationRemindersProvider);
-    final bgEnabled = ref.watch(locationBgEnabledProvider);
+
+    // 数据变化（增/删/开关）时同步服务启停与常驻通知数字
+    ref.listen(locationRemindersProvider, (_, __) {
+      LocationReminderFgService.sync();
+    });
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('途径提醒'),
-        actions: [
-          Row(
-            children: [
-              const Text('后台监控', style: TextStyle(fontSize: 12)),
-              Switch(
-                value: bgEnabled,
-                onChanged: (v) async {
-                  await ref.read(locationBgEnabledProvider.notifier).set(v);
-                  if (v) {
-                    await LocationFgService.init();
-                    await LocationFgService.start(AppDatabase.instance);
-                  } else {
-                    await LocationFgService.stop();
-                  }
-                },
-              ),
-            ],
-          ),
-        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => Navigator.of(context).push(
@@ -144,8 +109,10 @@ class _Row extends ConsumerWidget {
                 Text(r.title,
                     style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
                 const SizedBox(height: 4),
-                Text('${r.placeName} · 半径${r.radiusMeters}m',
-                    style: const TextStyle(fontSize: 12, color: AppColors.neutral)),
+                Text(
+                  '${r.placeName} · 半径${r.radiusMeters}m · ${r.triggerOn == 'exit' ? '离开时' : '进入时'}提醒',
+                  style: const TextStyle(fontSize: 12, color: AppColors.neutral),
+                ),
               ],
             ),
           ),
